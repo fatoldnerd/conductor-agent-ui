@@ -44,7 +44,12 @@ import type {
 
 type View = 'dashboard' | 'agents' | 'teams' | 'workflows' | 'tools' | 'activity';
 
-const NAV: { id: View; label: string; icon: (p: { width?: number; height?: number }) => JSX.Element; badge?: string }[] = [
+const NAV: {
+  id: View;
+  label: string;
+  icon: (p: { width?: number; height?: number }) => JSX.Element;
+  badge?: string;
+}[] = [
   { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
   { id: 'agents', label: 'Agents', icon: IconAgents, badge: String(agents.length) },
   { id: 'teams', label: 'Teams', icon: IconTeams, badge: String(teams.length) },
@@ -54,7 +59,7 @@ const NAV: { id: View; label: string; icon: (p: { width?: number; height?: numbe
 ];
 
 const TITLES: Record<View, { title: string; crumb: string }> = {
-  dashboard: { title: 'Mission Control', crumb: 'Live overview' },
+  dashboard: { title: 'Overview', crumb: 'Live operations' },
   agents: { title: 'Agents', crumb: 'All running and idle agents' },
   teams: { title: 'Teams', crumb: 'Coordinated agent squads' },
   workflows: { title: 'Workflows', crumb: 'Pipelines and graphs' },
@@ -173,6 +178,7 @@ function TopBar({ view }: { view: View }) {
 
 function DashboardView() {
   const recentAgents = agents.slice(0, 6);
+  const onlineCount = tools.filter((t) => t.status === 'connected').length;
   return (
     <>
       <section className="stats-row">
@@ -184,7 +190,9 @@ function DashboardView() {
       <section>
         <div className="section-head">
           <h2>Connected tools</h2>
-          <span className="hint">{tools.filter((t) => t.status === 'connected').length} online · {tools.length} total</span>
+          <span className="hint">
+            {onlineCount} online · {tools.length} total
+          </span>
           <span className="right">
             <button className="btn-ghost">Manage integrations</button>
           </span>
@@ -200,7 +208,9 @@ function DashboardView() {
         <div>
           <div className="section-head">
             <h2>Active agents</h2>
-            <span className="hint">Showing {recentAgents.length} of {agents.length}</span>
+            <span className="hint">
+              {recentAgents.length} of {agents.length}
+            </span>
             <span className="right">
               <button className="btn-ghost">View all</button>
             </span>
@@ -239,7 +249,7 @@ function StatCard({ stat }: { stat: Stat }) {
       <span className="label">{stat.label}</span>
       <span className="value">{stat.value}</span>
       <span className={`change ${stat.trend}`}>
-        {stat.trend !== 'flat' && <Trend width={11} height={11} />}
+        {stat.trend !== 'flat' && <Trend width={10} height={10} />}
         {stat.change}
       </span>
       <Sparkline points={stat.spark} trend={stat.trend} />
@@ -248,8 +258,8 @@ function StatCard({ stat }: { stat: Stat }) {
 }
 
 function Sparkline({ points, trend }: { points: number[]; trend: 'up' | 'down' | 'flat' }) {
-  const w = 86;
-  const h = 28;
+  const w = 88;
+  const h = 32;
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = max - min || 1;
@@ -257,41 +267,76 @@ function Sparkline({ points, trend }: { points: number[]; trend: 'up' | 'down' |
   const path = points
     .map((p, i) => {
       const x = i * step;
-      const y = h - ((p - min) / range) * h;
+      const y = h - ((p - min) / range) * (h - 2) - 1;
       return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
     })
     .join(' ');
-  const stroke = trend === 'down' ? 'var(--cyan)' : trend === 'flat' ? 'var(--text-dim)' : 'var(--green)';
-  const fill = trend === 'down' ? 'rgba(34,211,238,0.18)' : 'rgba(52,211,153,0.18)';
+  // Single neutral palette — colour comes from the change pill, not the spark.
+  const stroke =
+    trend === 'up'
+      ? 'rgba(34, 197, 94, 0.85)'
+      : trend === 'down'
+        ? 'rgba(255, 255, 255, 0.45)'
+        : 'rgba(255, 255, 255, 0.30)';
+  const fill =
+    trend === 'up'
+      ? 'rgba(34, 197, 94, 0.10)'
+      : 'rgba(255, 255, 255, 0.04)';
   const area = `${path} L${w} ${h} L0 ${h} Z`;
   return (
     <svg className="spark" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
       <path d={area} fill={fill} stroke="none" />
-      <path d={path} fill="none" stroke={stroke} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={path}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={1.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 /* -------------------------------------------------------------- Tool cards */
 
+/** Restrained tinted glyph — desaturated tool hue on a dark surface. */
 function toolGlyphStyle(id: ToolId) {
   const meta = toolMeta[id];
   const hue = meta?.hue ?? 240;
   return {
-    background: `linear-gradient(135deg, hsl(${hue} 80% 60%), hsl(${(hue + 40) % 360} 75% 50%))`,
+    background: `hsl(${hue}, 14%, 14%)`,
+    color: `hsl(${hue}, 30%, 78%)`,
+    boxShadow: `inset 0 0 0 1px hsl(${hue}, 18%, 24%)`,
   };
 }
 
 function statusChip(status: ToolStatus) {
   switch (status) {
     case 'connected':
-      return <span className="chip green"><span className="dot green" /> Connected</span>;
+      return (
+        <span className="chip green">
+          <span className="dot green" /> Connected
+        </span>
+      );
     case 'degraded':
-      return <span className="chip amber"><span className="dot amber" /> Degraded</span>;
+      return (
+        <span className="chip amber">
+          <span className="dot amber" /> Degraded
+        </span>
+      );
     case 'disconnected':
-      return <span className="chip red"><span className="dot red" /> Offline</span>;
+      return (
+        <span className="chip red">
+          <span className="dot red" /> Offline
+        </span>
+      );
     case 'pending':
-      return <span className="chip"><span className="dot" /> Pending</span>;
+      return (
+        <span className="chip">
+          <span className="dot" /> Pending
+        </span>
+      );
   }
 }
 
@@ -300,7 +345,9 @@ function ToolCard({ tool }: { tool: Tool }) {
   return (
     <div className="tool-card">
       <div className="head">
-        <span className="glyph" style={toolGlyphStyle(tool.id)}>{meta?.short ?? '?'}</span>
+        <span className="tool-glyph" style={toolGlyphStyle(tool.id)}>
+          {meta?.short ?? '??'}
+        </span>
         <div>
           <div className="title">{tool.name}</div>
           <div className="cat">{tool.category}</div>
@@ -308,8 +355,10 @@ function ToolCard({ tool }: { tool: Tool }) {
       </div>
       <div className="body">{tool.description}</div>
       <div className="row">
-        <span className="status-line">{statusChip(tool.status)}</span>
-        <span>{tool.agentsRunning} agent{tool.agentsRunning === 1 ? '' : 's'}</span>
+        <span>{statusChip(tool.status)}</span>
+        <span className="num">
+          {tool.agentsRunning} agent{tool.agentsRunning === 1 ? '' : 's'}
+        </span>
       </div>
     </div>
   );
@@ -317,18 +366,15 @@ function ToolCard({ tool }: { tool: Tool }) {
 
 /* -------------------------------------------------------------- Agent cards */
 
-const AGENT_AVATAR_GRADS = [
-  'linear-gradient(135deg,#7c5cff,#22d3ee)',
-  'linear-gradient(135deg,#f472b6,#7c5cff)',
-  'linear-gradient(135deg,#22d3ee,#34d399)',
-  'linear-gradient(135deg,#fb923c,#f472b6)',
-  'linear-gradient(135deg,#34d399,#22d3ee)',
-  'linear-gradient(135deg,#a78bfa,#22d3ee)',
-];
-
-function avatarFor(id: string) {
+/** Restrained agent avatar — desaturated solid based on a deterministic hue. */
+function avatarStyle(id: string) {
   const seed = id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  return AGENT_AVATAR_GRADS[seed % AGENT_AVATAR_GRADS.length];
+  const hue = (seed * 47) % 360;
+  return {
+    background: `hsl(${hue}, 14%, 18%)`,
+    boxShadow: `inset 0 0 0 1px hsl(${hue}, 22%, 30%)`,
+    color: `hsl(${hue}, 25%, 82%)`,
+  };
 }
 
 function statusDot(status: AgentStatus) {
@@ -347,22 +393,47 @@ function statusDot(status: AgentStatus) {
 function statusChipForAgent(status: AgentStatus) {
   switch (status) {
     case 'active':
-      return <span className="chip green"><span className="dot green" /> Active</span>;
+      return (
+        <span className="chip green">
+          <span className="dot green" /> Active
+        </span>
+      );
     case 'idle':
-      return <span className="chip"><span className="dot" /> Idle</span>;
+      return (
+        <span className="chip">
+          <span className="dot" /> Idle
+        </span>
+      );
     case 'paused':
-      return <span className="chip amber"><span className="dot amber" /> Paused</span>;
+      return (
+        <span className="chip amber">
+          <span className="dot amber" /> Paused
+        </span>
+      );
     case 'error':
-      return <span className="chip red"><span className="dot red" /> Error</span>;
+      return (
+        <span className="chip red">
+          <span className="dot red" /> Error
+        </span>
+      );
   }
 }
 
 function AgentCard({ agent }: { agent: Agent }) {
   const tool = tools.find((t) => t.id === agent.tool);
+  const successPct = Math.round(agent.successRate * 100);
+  const progressClass =
+    agent.status === 'error'
+      ? 'progress red'
+      : successPct >= 95
+        ? 'progress green'
+        : successPct >= 85
+          ? 'progress'
+          : 'progress';
   return (
     <div className="card agent-card">
       <div className="head">
-        <span className="agent-avatar" style={{ background: avatarFor(agent.id) }}>
+        <span className="agent-avatar" style={avatarStyle(agent.id)}>
           {agent.name.slice(0, 2).toUpperCase()}
         </span>
         <div className="name-line">
@@ -383,34 +454,36 @@ function AgentCard({ agent }: { agent: Agent }) {
         </div>
         <div>
           <div className="k">Tasks</div>
-          <div className="v">{agent.tasksCompleted}</div>
+          <div className="v num">{agent.tasksCompleted}</div>
         </div>
         <div>
           <div className="k">Cost today</div>
-          <div className="v">${agent.costToday.toFixed(2)}</div>
+          <div className="v num">${agent.costToday.toFixed(2)}</div>
         </div>
       </div>
 
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>
+        <div className="progress-row">
           <span>Success</span>
-          <span style={{ color: 'var(--text)' }}>{Math.round(agent.successRate * 100)}%</span>
+          <span className="v num">{successPct}%</span>
         </div>
-        <div className="progress">
-          <span style={{ width: `${agent.successRate * 100}%` }} />
+        <div className={progressClass}>
+          <span style={{ width: `${successPct}%` }} />
         </div>
       </div>
 
       <div className="tags">
         {agent.tags.map((tag) => (
-          <span key={tag} className="chip">{tag}</span>
+          <span key={tag} className="chip">
+            {tag}
+          </span>
         ))}
       </div>
 
       <div className="foot">
         {statusDot(agent.status)}
         <span>{agent.lastActivity}</span>
-        <span style={{ marginLeft: 'auto' }}>{(agent.tokens / 1000).toFixed(0)}k tokens</span>
+        <span className="num-tokens">{(agent.tokens / 1000).toFixed(0)}k tokens</span>
       </div>
     </div>
   );
@@ -449,9 +522,7 @@ function AgentsView() {
         })}
         <span style={{ marginLeft: 'auto' }}>
           <button className="btn-ghost primary">
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <IconPlus width={12} height={12} /> Spawn agent
-            </span>
+            <IconPlus width={12} height={12} /> Spawn agent
           </button>
         </span>
       </div>
@@ -484,36 +555,47 @@ function TeamsView() {
 }
 
 function TeamCard({ team }: { team: Team }) {
-  const members = team.agentIds.map((id) => agents.find((a) => a.id === id)).filter(Boolean) as Agent[];
+  const members = team.agentIds
+    .map((id) => agents.find((a) => a.id === id))
+    .filter(Boolean) as Agent[];
   const visible = members.slice(0, 4);
   const extra = members.length - visible.length;
   const steps = team.workflow.split('→').map((s) => s.trim());
-  const statusChip = team.status === 'running'
-    ? <span className="chip green"><span className="dot green" /> Running</span>
-    : team.status === 'paused'
-      ? <span className="chip amber"><span className="dot amber" /> Paused</span>
-      : <span className="chip violet"><span className="dot violet" /> Planning</span>;
+  const chip =
+    team.status === 'running' ? (
+      <span className="chip green">
+        <span className="dot green" /> Running
+      </span>
+    ) : team.status === 'paused' ? (
+      <span className="chip amber">
+        <span className="dot amber" /> Paused
+      </span>
+    ) : (
+      <span className="chip indigo">
+        <span className="dot indigo" /> Planning
+      </span>
+    );
 
   return (
     <div className="card team-card" style={{ ['--team-color' as string]: team.color }}>
       <div className="team-head">
         <h3>{team.name}</h3>
-        <span style={{ marginLeft: 'auto' }}>{statusChip}</span>
+        <span style={{ marginLeft: 'auto' }}>{chip}</span>
       </div>
       <p className="desc">{team.description}</p>
 
       <div className="members">
         {visible.map((m) => (
-          <span key={m.id} className="agent-avatar" style={{ background: avatarFor(m.id) }}>
+          <span key={m.id} className="agent-avatar" style={avatarStyle(m.id)}>
             {m.name.slice(0, 2).toUpperCase()}
           </span>
         ))}
-        {extra > 0 && <span className="extra">+{extra} more</span>}
+        {extra > 0 && <span className="extra">+{extra}</span>}
       </div>
 
       <div className="workflow-flow">
         {steps.map((s, i) => (
-          <span key={i} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+          <span key={i} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
             <span className="step">{s}</span>
             {i < steps.length - 1 && <span className="arrow">→</span>}
           </span>
@@ -521,15 +603,13 @@ function TeamCard({ team }: { team: Team }) {
       </div>
 
       <div className="foot-row">
-        <span style={{ fontSize: 11.5, color: 'var(--text-dim)' }}>
+        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
           {members.length} agent{members.length === 1 ? '' : 's'}
         </span>
         <span className="actions">
           <button className="btn-ghost">
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              {team.status === 'running' ? <IconPause width={11} height={11} /> : <IconPlay width={11} height={11} />}
-              {team.status === 'running' ? 'Pause' : 'Run'}
-            </span>
+            {team.status === 'running' ? <IconPause width={11} height={11} /> : <IconPlay width={11} height={11} />}
+            {team.status === 'running' ? 'Pause' : 'Run'}
           </button>
           <button className="btn-ghost primary">Open</button>
         </span>
@@ -542,24 +622,22 @@ function TeamCard({ team }: { team: Team }) {
 
 function WorkflowsView() {
   return (
-    <div className="canvas-wrap">
+    <div className="canvas-wrap workflow-view">
       <div className="canvas-bg" />
       <div className="canvas-head">
         <h3>{workflow.name}</h3>
-        <span className="chip green"><span className="dot green" /> Live</span>
-        <span style={{ fontSize: 11.5, color: 'var(--text-dim)' }}>
+        <span className="chip green">
+          <span className="dot green" /> Live
+        </span>
+        <span className="canvas-meta num">
           {workflow.nodes.length} nodes · {workflow.edges.length} edges
         </span>
         <span className="right">
           <button className="btn-ghost">
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <IconPause width={11} height={11} /> Pause
-            </span>
+            <IconPause width={11} height={11} /> Pause
           </button>
           <button className="btn-ghost primary">
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <IconPlay width={11} height={11} /> Run again
-            </span>
+            <IconPlay width={11} height={11} /> Run again
           </button>
         </span>
       </div>
@@ -572,8 +650,8 @@ function WorkflowsView() {
 
 function WorkflowCanvas({ wf }: { wf: Workflow }) {
   const NODE_W = 168;
-  const NODE_H = 64;
-  const PAD = 40;
+  const NODE_H = 60;
+  const PAD = 36;
   const width = Math.max(...wf.nodes.map((n) => n.x)) + NODE_W + PAD * 2;
   const height = Math.max(...wf.nodes.map((n) => n.y)) + NODE_H + PAD * 2;
 
@@ -590,19 +668,32 @@ function WorkflowCanvas({ wf }: { wf: Workflow }) {
 
   const subFor = (kind: string) => {
     switch (kind) {
-      case 'trigger': return 'TRIGGER';
-      case 'agent': return 'AGENT';
-      case 'gate': return 'GATE';
-      case 'output': return 'OUTPUT';
-      default: return '';
+      case 'trigger':
+        return 'TRIGGER';
+      case 'agent':
+        return 'AGENT';
+      case 'gate':
+        return 'GATE';
+      case 'output':
+        return 'OUTPUT';
+      default:
+        return '';
     }
   };
 
   return (
     <svg className="canvas-svg" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <defs>
-        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-          <path d="M0,0 L10,5 L0,10 z" fill="rgba(124,92,255,0.7)" />
+        <marker
+          id="arrow"
+          viewBox="0 0 10 10"
+          refX="8"
+          refY="5"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto-start-reverse"
+        >
+          <path d="M0,0 L10,5 L0,10 z" fill="rgba(255, 255, 255, 0.45)" />
         </marker>
       </defs>
 
@@ -617,8 +708,18 @@ function WorkflowCanvas({ wf }: { wf: Workflow }) {
             <path d={d} className="canvas-edge" markerEnd="url(#arrow)" />
             {e.label && (
               <g>
-                <rect x={lx - 22} y={ly - 9} width={44} height={16} rx={4} fill="var(--surface-2)" stroke="var(--border)" />
-                <text x={lx} y={ly + 2} textAnchor="middle" className="canvas-edge-label">{e.label}</text>
+                <rect
+                  x={lx - 22}
+                  y={ly - 9}
+                  width={44}
+                  height={16}
+                  rx={4}
+                  fill="var(--surface-2)"
+                  stroke="var(--border-strong)"
+                />
+                <text x={lx} y={ly + 2} textAnchor="middle" className="canvas-edge-label">
+                  {e.label}
+                </text>
               </g>
             )}
           </g>
@@ -632,10 +733,14 @@ function WorkflowCanvas({ wf }: { wf: Workflow }) {
         const isLive = agent?.status === 'active';
         return (
           <g key={n.id} className={`canvas-node-${n.kind}`}>
-            <rect className="canvas-node" x={x} y={y} width={NODE_W} height={NODE_H} rx={10} />
-            <text x={x + 14} y={y + 24} className="canvas-node-sub">{subFor(n.kind)}</text>
-            <text x={x + 14} y={y + 44} className="canvas-node-label">{n.label}</text>
-            {isLive && <circle cx={x + NODE_W - 14} cy={y + 14} r={4} className="canvas-node-pulse" />}
+            <rect className="canvas-node" x={x} y={y} width={NODE_W} height={NODE_H} rx={8} />
+            <text x={x + 14} y={y + 22} className="canvas-node-sub">
+              {subFor(n.kind)}
+            </text>
+            <text x={x + 14} y={y + 42} className="canvas-node-label">
+              {n.label}
+            </text>
+            {isLive && <circle cx={x + NODE_W - 12} cy={y + 12} r={3.5} className="canvas-node-pulse" />}
           </g>
         );
       })}
@@ -660,12 +765,12 @@ function ToolCardLarge({ tool }: { tool: Tool }) {
   return (
     <div className="card tool-card-lg">
       <div className="head">
-        <span className="glyph" style={toolGlyphStyle(tool.id)}>{meta?.short ?? '?'}</span>
+        <span className="tool-glyph" style={toolGlyphStyle(tool.id)}>
+          {meta?.short ?? '??'}
+        </span>
         <div>
           <h3>{tool.name}</h3>
-          <span className="cat" style={{ fontSize: 10.5, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-            {tool.category}
-          </span>
+          <span className="cat">{tool.category}</span>
         </div>
         <span style={{ marginLeft: 'auto' }}>{statusChip(tool.status)}</span>
       </div>
@@ -673,18 +778,20 @@ function ToolCardLarge({ tool }: { tool: Tool }) {
       <div className="stats">
         <div>
           <div className="k">Latency</div>
-          <div className="v">{tool.latencyMs ? `${tool.latencyMs} ms` : '—'}</div>
+          <div className="v num">{tool.latencyMs ? `${tool.latencyMs} ms` : '—'}</div>
         </div>
         <div>
           <div className="k">Agents running</div>
-          <div className="v">{tool.agentsRunning}</div>
+          <div className="v num">{tool.agentsRunning}</div>
         </div>
       </div>
       <div className="actions">
         <button className="btn-ghost">Configure</button>
-        {tool.status === 'connected'
-          ? <button className="btn-ghost primary">Open</button>
-          : <button className="btn-ghost primary">Reconnect</button>}
+        {tool.status === 'connected' ? (
+          <button className="btn-ghost primary">Open</button>
+        ) : (
+          <button className="btn-ghost primary">Reconnect</button>
+        )}
       </div>
     </div>
   );
@@ -694,7 +801,7 @@ function ToolCardLarge({ tool }: { tool: Tool }) {
 
 function ActivityView() {
   return (
-    <div className="card activity">
+    <div className="card activity activity-view-card">
       <ActivityList items={activity} />
     </div>
   );
