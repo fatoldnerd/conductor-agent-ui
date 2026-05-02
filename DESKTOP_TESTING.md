@@ -85,9 +85,15 @@ Unsigned builds may trigger macOS Gatekeeper warnings. That is expected until we
 
 ## CI macOS artifact
 
-GitHub Actions includes a manual workflow named **Desktop macOS Build**. Trigger it from GitHub Actions to build an unsigned macOS artifact on a real macOS runner.
+A macOS GitHub Actions workflow template is checked in at:
 
-The workflow uploads `release/` as an artifact. It does not publish a release and does not sign/notarize yet.
+```text
+ci-templates/desktop-macos.yml
+```
+
+It builds an unsigned macOS artifact on a real macOS runner and uploads `release/` as an artifact. It does not publish a release and does not sign/notarize yet.
+
+Note: the current GitHub token available to Hermes cannot push active `.github/workflows/*` files because it lacks the `workflow` scope. To activate the workflow, copy the template to `.github/workflows/desktop-macos.yml` using a GitHub token/account with workflow permission.
 
 ## Before pushing desktop changes
 
