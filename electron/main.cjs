@@ -3,6 +3,7 @@ const { execFile } = require('node:child_process');
 const os = require('node:os');
 const path = require('node:path');
 const { promisify } = require('node:util');
+const { listIntegrationRecipes, planIntegrationInstall } = require('./integrationRecipes.cjs');
 
 const execFileAsync = promisify(execFile);
 const isDev = process.env.VITE_DEV_SERVER_URL || process.env.NODE_ENV === 'development';
@@ -23,7 +24,7 @@ function createWindow() {
       preload: PRELOAD_PATH,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       webSecurity: true,
       allowRunningInsecureContent: false,
     },
@@ -112,6 +113,15 @@ ipcMain.handle('system:checkPrerequisites', async () => {
   ]);
 
   return Object.fromEntries(await Promise.all(checks.map(async ([name, resultPromise]) => [name, await resultPromise])));
+});
+
+ipcMain.handle('integrations:listRecipes', async () => listIntegrationRecipes());
+
+ipcMain.handle('integrations:planInstall', async (_event, recipeId) => {
+  if (typeof recipeId !== 'string' || !/^[a-z0-9-]+$/.test(recipeId)) {
+    throw new Error('Invalid integration id');
+  }
+  return planIntegrationInstall(recipeId, process.platform);
 });
 
 app.whenReady().then(() => {

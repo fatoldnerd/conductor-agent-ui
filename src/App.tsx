@@ -30,6 +30,12 @@ import {
   tools,
   workflow,
 } from './data/mockData';
+import {
+  listIntegrationRecipes,
+  planIntegrationInstall,
+  type IntegrationInstallPlan,
+  type IntegrationRecipe,
+} from './integrations/recipes';
 import type {
   ActivityEvent,
   Agent,
@@ -42,7 +48,7 @@ import type {
   Workflow,
 } from './types';
 
-type View = 'dashboard' | 'agents' | 'teams' | 'workflows' | 'tools' | 'activity' | 'diagnostics';
+type View = 'dashboard' | 'agents' | 'teams' | 'workflows' | 'tools' | 'integrations' | 'activity' | 'diagnostics';
 
 const NAV: {
   id: View;
@@ -55,6 +61,7 @@ const NAV: {
   { id: 'teams', label: 'Teams', icon: IconTeams, badge: String(teams.length) },
   { id: 'workflows', label: 'Workflows', icon: IconWorkflow },
   { id: 'tools', label: 'Tools', icon: IconTools, badge: String(tools.length) },
+  { id: 'integrations', label: 'Installers', icon: IconCommand, badge: String(listIntegrationRecipes().length) },
   { id: 'activity', label: 'Activity', icon: IconActivity },
   { id: 'diagnostics', label: 'Diagnostics', icon: IconInfo },
 ];
@@ -65,6 +72,7 @@ const TITLES: Record<View, { title: string; crumb: string }> = {
   teams: { title: 'Teams', crumb: 'Coordinated agent squads' },
   workflows: { title: 'Workflows', crumb: 'Pipelines and graphs' },
   tools: { title: 'Tools', crumb: 'Connected providers' },
+  integrations: { title: 'Installers', crumb: 'Guided agent runtime setup' },
   activity: { title: 'Activity', crumb: 'Real-time event stream' },
   diagnostics: { title: 'Diagnostics', crumb: 'Desktop readiness checks' },
 };
@@ -83,6 +91,7 @@ export default function App() {
           {view === 'teams' && <TeamsView />}
           {view === 'workflows' && <WorkflowsView />}
           {view === 'tools' && <ToolsView />}
+          {view === 'integrations' && <IntegrationsView />}
           {view === 'activity' && <ActivityView />}
           {view === 'diagnostics' && <DiagnosticsView />}
         </div>
@@ -796,6 +805,122 @@ function ToolCardLarge({ tool }: { tool: Tool }) {
           <button className="btn-ghost primary">Reconnect</button>
         )}
       </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------- Integrations view */
+
+function getBrowserPlatform(): 'darwin' | 'linux' | 'win32' {
+  const platform = navigator.platform.toLowerCase();
+  if (platform.includes('mac')) return 'darwin';
+  if (platform.includes('win')) return 'win32';
+  return 'linux';
+}
+
+function IntegrationsView() {
+  const [recipes] = useState<IntegrationRecipe[]>(listIntegrationRecipes());
+  const [selectedId, setSelectedId] = useState('hermes-agent');
+  const [plan, setPlan] = useState<IntegrationInstallPlan | null>(() => planIntegrationInstall('hermes-agent', getBrowserPlatform()));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (window.conductor?.integrations) {
+      selectRecipe(recipes.find((recipe) => recipe.id === selectedId) ?? recipes[0]);
+    }
+  }, []);
+
+  const selectRecipe = async (recipe: IntegrationRecipe) => {
+    setSelectedId(recipe.id);
+    setError(null);
+    try {
+      const nextPlan = window.conductor?.integrations
+        ? await window.conductor.integrations.planInstall(recipe.id)
+        : planIntegrationInstall(recipe.id, getBrowserPlatform());
+      setPlan(nextPlan as IntegrationInstallPlan);
+    } catch (err) {
+      setPlan(null);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const selected = recipes.find((recipe) => recipe.id === selectedId) ?? recipes[0];
+
+  return (
+    <div className="integrations-layout">
+      <div className="integration-list">
+        {recipes.map((recipe) => (
+          <button
+            className={`integration-card card ${recipe.id === selected?.id ? 'selected' : ''}`}
+            key={recipe.id}
+            onClick={() => selectRecipe(recipe)}
+          >
+            <span className="integration-mark">{recipe.shortName.slice(0, 2).toUpperCase()}</span>
+            <span>
+              <strong>{recipe.name}</strong>
+              <span>{recipe.description}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {selected && (
+        <div className="card install-panel">
+          <div className="section-head compact">
+            <div>
+              <h2>{selected.name}</h2>
+              <span className="hint">{selected.category} · {selected.supportedPlatforms.join(', ')}</span>
+            </div>
+            <span className="chip chip-muted">Dry run</span>
+          </div>
+
+          <p className="panel-copy">{selected.description}</p>
+
+          <div className="install-meta">
+            <div>
+              <span>Providers</span>
+              <strong>{selected.providerRequirements.join(', ')}</strong>
+            </div>
+            <div>
+              <span>Prerequisites</span>
+              <strong>{selected.prerequisites.join(', ')}</strong>
+            </div>
+          </div>
+
+          <div className="install-callout">
+            <IconInfo />
+            <span>
+              This is intentionally a dry-run installer. The next slice will add a privileged approval flow before
+              Conductor executes any install command on the user's machine.
+            </span>
+          </div>
+
+          {error && <div className="install-error">{error}</div>}
+
+          {plan && (
+            <div className="install-steps">
+              {plan.steps.map((step, index) => (
+                <div className="install-step" key={step.id}>
+                  <span className="step-num">{index + 1}</span>
+                  <div>
+                    <strong>{step.title}</strong>
+                    <p>{step.description}</p>
+                    <code>{step.command}</code>
+                  </div>
+                  <span className={`chip ${step.requiresApproval ? 'chip-muted' : 'chip-ok'}`}>
+                    {step.requiresApproval ? 'Approval' : step.kind}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="actions">
+            <button className="btn-ghost primary" onClick={() => selectRecipe(selected)}>Refresh preview</button>
+            <button className="btn-ghost" onClick={() => window.open(selected.docsUrl, '_blank', 'noopener,noreferrer')}>Open docs</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
