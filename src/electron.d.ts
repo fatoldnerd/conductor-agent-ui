@@ -41,6 +41,33 @@ export type IntegrationInstallPlan = {
   warnings: string[];
 };
 
+export type IntegrationInstallRunStep = IntegrationRecipeSummary['install']['steps'][number] & {
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'requires_manual' | 'skipped';
+  output: string;
+  exitCode: number | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type IntegrationInstallRun = {
+  id: string;
+  recipeId: string;
+  platform: string;
+  status: 'ready' | 'running' | 'succeeded' | 'failed' | 'requires_manual';
+  createdAt: string;
+  approvedBy: string;
+  steps: IntegrationInstallRunStep[];
+  warnings: string[];
+};
+
+export type IntegrationAuditEvent = {
+  type: string;
+  timestamp: string;
+  runId?: string;
+  stepId?: string;
+  [key: string]: unknown;
+};
+
 declare global {
   interface Window {
     conductor?: {
@@ -51,6 +78,12 @@ declare global {
       integrations: {
         listRecipes: () => Promise<IntegrationRecipeSummary[]>;
         planInstall: (recipeId: string) => Promise<IntegrationInstallPlan>;
+        createInstallRun: (recipeId: string) => Promise<IntegrationInstallRun>;
+        getInstallRun: (runId: string) => Promise<IntegrationInstallRun>;
+        runInstallStep: (runId: string, stepId: string) => Promise<IntegrationInstallRunStep>;
+        runInstallSequence: (runId: string) => Promise<IntegrationInstallRun>;
+        listAuditEvents: (runId?: string) => Promise<IntegrationAuditEvent[]>;
+        onInstallOutput: (callback: (payload: { runId: string; stepId?: string; chunk: string }) => void) => () => void;
       };
     };
   }

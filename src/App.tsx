@@ -36,6 +36,7 @@ import {
   type IntegrationInstallPlan,
   type IntegrationRecipe,
 } from './integrations/recipes';
+import type { IntegrationInstallRun } from './electron';
 import type {
   ActivityEvent,
   Agent,
@@ -823,6 +824,11 @@ function IntegrationsView() {
   const [selectedId, setSelectedId] = useState('hermes-agent');
   const [plan, setPlan] = useState<IntegrationInstallPlan | null>(() => planIntegrationInstall('hermes-agent', getBrowserPlatform()));
   const [error, setError] = useState<string | null>(null);
+  const [approved, setApproved] = useState(false);
+  const [installRun, setInstallRun] = useState<IntegrationInstallRun | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installLog, setInstallLog] = useState('');
+  const desktopAvailable = Boolean(window.conductor?.integrations);
 
   useEffect(() => {
     if (window.conductor?.integrations) {
@@ -830,9 +836,19 @@ function IntegrationsView() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!window.conductor?.integrations?.onInstallOutput) return;
+    return window.conductor.integrations.onInstallOutput((payload) => {
+      setInstallLog((current) => `${current}${payload.chunk}`);
+    });
+  }, []);
+
   const selectRecipe = async (recipe: IntegrationRecipe) => {
     setSelectedId(recipe.id);
     setError(null);
+    setInstallRun(null);
+    setInstallLog('');
+    setApproved(false);
     try {
       const nextPlan = window.conductor?.integrations
         ? await window.conductor.integrations.planInstall(recipe.id)
@@ -841,6 +857,27 @@ function IntegrationsView() {
     } catch (err) {
       setPlan(null);
       setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const startApprovedInstall = async () => {
+    if (!selected || !window.conductor?.integrations || !approved) return;
+    setError(null);
+    setInstalling(true);
+    setInstallLog('');
+    try {
+      const run = await window.conductor.integrations.createInstallRun(selected.id);
+      setInstallRun(run);
+      const finished = await window.conductor.integrations.runInstallSequence(run.id);
+      setInstallRun(finished);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      if (installRun) {
+        const latest = await window.conductor.integrations.getInstallRun(installRun.id).catch(() => null);
+        if (latest) setInstallRun(latest);
+      }
+    } finally {
+      setInstalling(false);
     }
   };
 
@@ -871,7 +908,7 @@ function IntegrationsView() {
               <h2>{selected.name}</h2>
               <span className="hint">{selected.category} · {selected.supportedPlatforms.join(', ')}</span>
             </div>
-            <span className="chip chip-muted">Dry run</span>
+            <span className="chip chip-muted">Preview</span>
           </div>
 
           <p className="panel-copy">{selected.description}</p>
@@ -890,8 +927,8 @@ function IntegrationsView() {
           <div className="install-callout">
             <IconInfo />
             <span>
-              This is intentionally a dry-run installer. The next slice will add a privileged approval flow before
-              Conductor executes any install command on the user's machine.
+              This is an execution preview. The web app cannot execute commands. In the Electron desktop app,
+              Conductor requires both this UI acknowledgement and a native main-process approval dialog before any command runs.
             </span>
           </div>
 
@@ -915,8 +952,44 @@ function IntegrationsView() {
             </div>
           )}
 
+          {installRun && (
+            <div className="run-status-panel">
+              <div className="section-head compact">
+                <h2>Execution run</h2>
+                <span className={`chip ${installRun.status === 'failed' ? 'chip-muted' : 'chip-ok'}`}>{installRun.status}</span>
+              </div>
+              <div className="run-step-list">
+                {installRun.steps.map((step) => (
+                  <div className="run-step-row" key={step.id}>
+                    <span className={`status-dot ${step.status === 'succeeded' ? 'ok' : step.status === 'failed' ? 'missing' : ''}`} />
+                    <strong>{step.title}</strong>
+                    <span>{step.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {installLog && <pre className="install-log">{installLog}</pre>}
+
+          <div className="approval-panel">
+            <label>
+              <input
+                type="checkbox"
+                checked={approved}
+                disabled={!desktopAvailable || installing}
+                onChange={(event) => setApproved(event.currentTarget.checked)}
+              />
+              <span>I understand Conductor will show a native approval dialog before executing the trusted main-process commands above.</span>
+            </label>
+            {!desktopAvailable && <p>Installer execution is available only in the Electron desktop app. The web deployment remains preview-only.</p>}
+          </div>
+
           <div className="actions">
-            <button className="btn-ghost primary" onClick={() => selectRecipe(selected)}>Refresh preview</button>
+            <button className="btn-ghost primary" onClick={startApprovedInstall} disabled={!desktopAvailable || !approved || installing}>
+              {installing ? 'Running installer…' : 'Approve and run sequence'}
+            </button>
+            <button className="btn-ghost" onClick={() => selectRecipe(selected)} disabled={installing}>Refresh preview</button>
             <button className="btn-ghost" onClick={() => window.open(selected.docsUrl, '_blank', 'noopener,noreferrer')}>Open docs</button>
           </div>
         </div>

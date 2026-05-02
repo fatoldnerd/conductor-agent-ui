@@ -1,15 +1,45 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const { execFile } = require('node:child_process');
 const os = require('node:os');
 const path = require('node:path');
 const { promisify } = require('node:util');
 const { listIntegrationRecipes, planIntegrationInstall } = require('./integrationRecipes.cjs');
+const {
+  createInstallRun,
+  getInstallRun,
+  listAuditEvents,
+  runInstallSequence,
+  runInstallStep,
+  setAuditLogPath,
+} = require('./installerRunner.cjs');
 
 const execFileAsync = promisify(execFile);
 const isDev = process.env.VITE_DEV_SERVER_URL || process.env.NODE_ENV === 'development';
 
 const PRELOAD_PATH = path.join(__dirname, 'preload.cjs');
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['https:']);
+const runOwners = new Map();
+
+function packagedIndexPath() {
+  return path.join(__dirname, '../dist/index.html');
+}
+
+function isTrustedRendererUrl(url) {
+  const parsed = safeUrl(url);
+  if (!parsed) return false;
+  if (isDev) return parsed.origin === safeUrl(process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5173')?.origin;
+  return parsed.protocol === 'file:' && path.normalize(parsed.pathname) === path.normalize(packagedIndexPath());
+}
+
+function assertTrustedSender(event) {
+  if (!isTrustedRendererUrl(event.sender.getURL())) throw new Error('Untrusted renderer');
+}
+
+function assertRunOwner(event, runId) {
+  assertTrustedSender(event);
+  const owner = runOwners.get(runId);
+  if (owner && owner !== event.sender.id) throw new Error('Install run belongs to another window');
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -42,7 +72,11 @@ function createWindow() {
 
   win.webContents.on('will-navigate', (event, url) => {
     const parsed = safeUrl(url);
-    const expected = isDev ? process.env.VITE_DEV_SERVER_URL : `file://${path.join(__dirname, '../dist/index.html')}`;
+    const expected = isDev ? process.env.VITE_DEV_SERVER_URL : `file://${packagedIndexPath()}`;
+    if (!isDev && parsed?.protocol === 'file:') {
+      if (path.normalize(parsed.pathname) !== path.normalize(packagedIndexPath())) event.preventDefault();
+      return;
+    }
     const expectedOrigin = safeUrl(expected)?.origin;
     if (parsed?.origin !== expectedOrigin) {
       event.preventDefault();
@@ -115,16 +149,86 @@ ipcMain.handle('system:checkPrerequisites', async () => {
   return Object.fromEntries(await Promise.all(checks.map(async ([name, resultPromise]) => [name, await resultPromise])));
 });
 
-ipcMain.handle('integrations:listRecipes', async () => listIntegrationRecipes());
+ipcMain.handle('integrations:listRecipes', async (event) => {
+  assertTrustedSender(event);
+  return listIntegrationRecipes();
+});
 
-ipcMain.handle('integrations:planInstall', async (_event, recipeId) => {
+ipcMain.handle('integrations:planInstall', async (event, recipeId) => {
+  assertTrustedSender(event);
   if (typeof recipeId !== 'string' || !/^[a-z0-9-]+$/.test(recipeId)) {
     throw new Error('Invalid integration id');
   }
   return planIntegrationInstall(recipeId, process.platform);
 });
 
+async function confirmInstallRun(event, recipeId) {
+  const recipe = listIntegrationRecipes().find((item) => item.id === recipeId);
+  if (!recipe) throw new Error(`Unknown integration recipe: ${recipeId}`);
+  const focusedWindow = BrowserWindow.fromWebContents(event.sender);
+  const commands = recipe.install.steps.map((step, index) => `${index + 1}. ${step.title}\n${step.command}`).join('\n\n');
+  const result = await dialog.showMessageBox(focusedWindow, {
+    type: 'warning',
+    buttons: ['Cancel', 'Approve and run'],
+    defaultId: 0,
+    cancelId: 0,
+    title: `Approve ${recipe.name} installer`,
+    message: `Approve Conductor to execute allowlisted ${recipe.name} installer commands?`,
+    detail: `Commands from the trusted main-process recipe:\n\n${commands}`,
+    noLink: true,
+  });
+  return result.response === 1;
+}
+
+ipcMain.handle('integrations:createInstallRun', async (event, recipeId) => {
+  assertTrustedSender(event);
+  if (typeof recipeId !== 'string' || !/^[a-z0-9-]+$/.test(recipeId)) {
+    throw new Error('Invalid integration id');
+  }
+  const approved = await confirmInstallRun(event, recipeId);
+  if (!approved) throw new Error('Installer approval cancelled');
+  const run = createInstallRun(recipeId, process.platform, {
+    approved: true,
+    approvedBy: 'main-process-dialog',
+  });
+  runOwners.set(run.id, event.sender.id);
+  return run;
+});
+
+ipcMain.handle('integrations:getInstallRun', async (event, runId) => {
+  assertRunOwner(event, runId);
+  if (typeof runId !== 'string' || !/^run_[a-zA-Z0-9_-]+$/.test(runId)) {
+    throw new Error('Invalid run id');
+  }
+  return getInstallRun(runId);
+});
+
+ipcMain.handle('integrations:runInstallStep', async (event, runId, stepId) => {
+  assertRunOwner(event, runId);
+  if (typeof runId !== 'string' || typeof stepId !== 'string') throw new Error('Invalid run or step id');
+  return runInstallStep(runId, stepId, {
+    onOutput: (chunk) => event.sender.send('integrations:installOutput', { runId, stepId, chunk }),
+  });
+});
+
+ipcMain.handle('integrations:runInstallSequence', async (event, runId) => {
+  assertRunOwner(event, runId);
+  if (typeof runId !== 'string' || !/^run_[a-zA-Z0-9_-]+$/.test(runId)) {
+    throw new Error('Invalid run id');
+  }
+  return runInstallSequence(runId, {
+    onOutput: (chunk) => event.sender.send('integrations:installOutput', { runId, chunk }),
+  });
+});
+
+ipcMain.handle('integrations:listAuditEvents', async (event, runId) => {
+  if (runId) assertRunOwner(event, runId);
+  else assertTrustedSender(event);
+  return listAuditEvents(runId);
+});
+
 app.whenReady().then(() => {
+  setAuditLogPath(path.join(app.getPath('userData'), 'install-audit.jsonl'));
   createWindow();
 
   app.on('activate', () => {

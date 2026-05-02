@@ -1697,3 +1697,74 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* ------------------------------------------------------------------
+   Installer execution approval and logs
+------------------------------------------------------------------- */
+
+.approval-panel,
+.run-status-panel {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.025);
+  margin-bottom: 14px;
+}
+.approval-panel label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.approval-panel input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+.approval-panel p {
+  margin: 8px 0 0 24px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.run-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.run-step-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.run-step-row:first-child {
+  border-top: 0;
+}
+.run-step-row strong {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.run-step-row span:last-child {
+  color: var(--text-dim);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+}
+.install-log {
+  max-height: 240px;
+  overflow: auto;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0 0 14px;
+}

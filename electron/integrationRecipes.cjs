@@ -63,7 +63,7 @@ const recipes = [
       step('hermes-prereq-python', 'Check Python', 'prerequisite', 'Confirm Python 3 is available.', 'python3 --version'),
       step('hermes-prereq-git', 'Check Git', 'prerequisite', 'Confirm Git is available.', 'git --version'),
       step('hermes-install', 'Install Hermes Agent', 'install', 'Run the official Hermes installer.', 'curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash', true),
-      step('hermes-setup', 'Run setup wizard', 'configure', 'Launch Hermes setup for provider, model, and tool configuration.', 'hermes setup'),
+      step('hermes-setup', 'Run setup wizard', 'manual', 'Launch Hermes setup for provider, model, and tool configuration after install completes.', 'hermes setup'),
       step('hermes-verify', 'Verify Hermes', 'verify', 'Confirm Hermes responds with a version.', 'hermes --version'),
       step('hermes-doctor', 'Run Hermes doctor', 'verify', 'Check Hermes configuration and dependencies.', 'hermes doctor'),
     ]},
@@ -115,7 +115,7 @@ function planIntegrationInstall(id, platform = process.platform) {
     steps: recipe.install.steps,
     warnings: [
       ...(recipe.riskNotes || []),
-      'Dry-run only. Commands are not executed until an explicit privileged installer flow exists.',
+      'Preview mode: the web app never executes commands. The Electron desktop app requires a native approval dialog before executing trusted recipe commands.',
     ],
   };
 }
