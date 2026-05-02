@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   IconActivity,
   IconAgents,
@@ -42,7 +42,7 @@ import type {
   Workflow,
 } from './types';
 
-type View = 'dashboard' | 'agents' | 'teams' | 'workflows' | 'tools' | 'activity';
+type View = 'dashboard' | 'agents' | 'teams' | 'workflows' | 'tools' | 'activity' | 'diagnostics';
 
 const NAV: {
   id: View;
@@ -56,6 +56,7 @@ const NAV: {
   { id: 'workflows', label: 'Workflows', icon: IconWorkflow },
   { id: 'tools', label: 'Tools', icon: IconTools, badge: String(tools.length) },
   { id: 'activity', label: 'Activity', icon: IconActivity },
+  { id: 'diagnostics', label: 'Diagnostics', icon: IconInfo },
 ];
 
 const TITLES: Record<View, { title: string; crumb: string }> = {
@@ -65,6 +66,7 @@ const TITLES: Record<View, { title: string; crumb: string }> = {
   workflows: { title: 'Workflows', crumb: 'Pipelines and graphs' },
   tools: { title: 'Tools', crumb: 'Connected providers' },
   activity: { title: 'Activity', crumb: 'Real-time event stream' },
+  diagnostics: { title: 'Diagnostics', crumb: 'Desktop readiness checks' },
 };
 
 export default function App() {
@@ -82,6 +84,7 @@ export default function App() {
           {view === 'workflows' && <WorkflowsView />}
           {view === 'tools' && <ToolsView />}
           {view === 'activity' && <ActivityView />}
+          {view === 'diagnostics' && <DiagnosticsView />}
         </div>
       </div>
     </div>
@@ -792,6 +795,128 @@ function ToolCardLarge({ tool }: { tool: Tool }) {
         ) : (
           <button className="btn-ghost primary">Reconnect</button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------- Diagnostics view */
+
+type PrerequisiteStatus = {
+  available: boolean;
+  version: string | null;
+  error?: string;
+};
+
+type SystemInfo = {
+  appVersion: string;
+  platform: string;
+  arch: string;
+  osRelease: string;
+  hostname: string;
+  homeDir: string;
+};
+
+function DiagnosticsView() {
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [checks, setChecks] = useState<Record<string, PrerequisiteStatus> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const desktopAvailable = Boolean(window.conductor);
+
+  const runChecks = async () => {
+    if (!window.conductor) return;
+    setLoading(true);
+    try {
+      const [info, prerequisites] = await Promise.all([
+        window.conductor.system.getInfo(),
+        window.conductor.system.checkPrerequisites(),
+      ]);
+      setSystemInfo(info);
+      setChecks(prerequisites);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    runChecks();
+  }, []);
+
+  if (!desktopAvailable) {
+    return (
+      <div className="diagnostics-grid">
+        <div className="card diagnostic-hero">
+          <span className="eyebrow">Desktop foundation</span>
+          <h2>Electron shell not active</h2>
+          <p>
+            This web deployment is still useful for design review. The desktop build exposes local diagnostics,
+            prerequisite checks, and eventually install controls through the secure Electron bridge.
+          </p>
+          <div className="actions">
+            <button className="btn-ghost primary">Run as desktop app</button>
+            <span className="hint">Use npm run desktop:dev locally.</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const entries = Object.entries(checks ?? {});
+  const availableCount = entries.filter(([, check]) => check.available).length;
+
+  return (
+    <div className="diagnostics-grid">
+      <div className="card diagnostic-hero">
+        <span className="eyebrow">Desktop foundation</span>
+        <h2>Local system diagnostics</h2>
+        <p>
+          Conductor can now query the local machine through a narrow Electron IPC bridge. This is the first
+          building block for guided installs, provider setup, health checks, and agent runtime management.
+        </p>
+        <div className="actions">
+          <button className="btn-ghost primary" onClick={runChecks} disabled={loading}>
+            {loading ? 'Checking…' : 'Refresh checks'}
+          </button>
+          <span className="hint">{checks ? `${availableCount} of ${entries.length} tools found` : 'Awaiting checks'}</span>
+        </div>
+      </div>
+
+      {systemInfo && (
+        <div className="card diagnostic-panel">
+          <div className="section-head compact">
+            <h2>Machine</h2>
+            <span className="hint">Conductor {systemInfo.appVersion}</span>
+          </div>
+          <div className="kv-grid">
+            <div><span>Platform</span><strong>{systemInfo.platform}</strong></div>
+            <div><span>Architecture</span><strong>{systemInfo.arch}</strong></div>
+            <div><span>OS release</span><strong>{systemInfo.osRelease}</strong></div>
+            <div><span>Hostname</span><strong>{systemInfo.hostname}</strong></div>
+            <div className="wide"><span>Home directory</span><strong>{systemInfo.homeDir}</strong></div>
+          </div>
+        </div>
+      )}
+
+      <div className="card diagnostic-panel wide-panel">
+        <div className="section-head compact">
+          <h2>Agent tooling prerequisites</h2>
+          <span className="hint">Install readiness</span>
+        </div>
+        <div className="check-list">
+          {entries.map(([name, check]) => (
+            <div className="check-row" key={name}>
+              <span className={`status-dot ${check.available ? 'ok' : 'missing'}`} />
+              <div>
+                <strong>{name}</strong>
+                <span>{check.available ? check.version : check.error ?? 'not found'}</span>
+              </div>
+              <span className={`chip ${check.available ? 'chip-ok' : 'chip-muted'}`}>
+                {check.available ? 'Available' : 'Missing'}
+              </span>
+            </div>
+          ))}
+          {!entries.length && <p className="empty-state">Run the desktop app to collect prerequisite status.</p>}
+        </div>
       </div>
     </div>
   );
