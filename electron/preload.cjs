@@ -4,6 +4,7 @@ const conductorApi = {
   system: {
     getInfo: () => ipcRenderer.invoke('system:getInfo'),
     checkPrerequisites: () => ipcRenderer.invoke('system:checkPrerequisites'),
+    collectInventory: () => ipcRenderer.invoke('system:collectInventory'),
   },
   integrations: {
     listRecipes: () => ipcRenderer.invoke('integrations:listRecipes'),

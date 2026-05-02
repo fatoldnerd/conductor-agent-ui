@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { promisify } = require('node:util');
 const { listIntegrationRecipes, planIntegrationInstall } = require('./integrationRecipes.cjs');
+const { collectLocalInventory } = require('./systemInventory.cjs');
 const {
   createInstallRun,
   getInstallRun,
@@ -147,6 +148,11 @@ ipcMain.handle('system:checkPrerequisites', async () => {
   ]);
 
   return Object.fromEntries(await Promise.all(checks.map(async ([name, resultPromise]) => [name, await resultPromise])));
+});
+
+ipcMain.handle('system:collectInventory', async (event) => {
+  assertTrustedSender(event);
+  return collectLocalInventory();
 });
 
 ipcMain.handle('integrations:listRecipes', async (event) => {

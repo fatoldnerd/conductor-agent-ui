@@ -13,6 +13,38 @@ export type SystemInfo = {
   homeDir: string;
 };
 
+export type InventoryToolStatus = {
+  id: string;
+  available: boolean;
+  status: 'ready' | 'missing';
+  version: string | null;
+  error?: string;
+};
+
+export type InventoryServiceStatus = {
+  id: string;
+  label: string;
+  running: boolean;
+  status: 'running' | 'stopped';
+  port?: number;
+};
+
+export type InventoryConfigStatus = {
+  id: string;
+  path: string;
+  exists: boolean;
+  status: 'found' | 'missing';
+  secrets?: Record<string, boolean>;
+};
+
+export type LocalInventory = {
+  collectedAt: string;
+  machine: Omit<SystemInfo, 'appVersion'>;
+  tools: Record<string, InventoryToolStatus>;
+  services: Record<string, InventoryServiceStatus>;
+  configs: Record<string, InventoryConfigStatus>;
+};
+
 export type IntegrationRecipeSummary = {
   id: string;
   name: string;
@@ -74,6 +106,7 @@ declare global {
       system: {
         getInfo: () => Promise<SystemInfo>;
         checkPrerequisites: () => Promise<Record<string, PrerequisiteStatus>>;
+        collectInventory: () => Promise<LocalInventory>;
       };
       integrations: {
         listRecipes: () => Promise<IntegrationRecipeSummary[]>;

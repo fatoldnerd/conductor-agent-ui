@@ -36,7 +36,7 @@ import {
   type IntegrationInstallPlan,
   type IntegrationRecipe,
 } from './integrations/recipes';
-import type { IntegrationInstallRun } from './electron';
+import type { IntegrationInstallRun, LocalInventory } from './electron';
 import type {
   ActivityEvent,
   Agent,
@@ -1000,24 +1000,8 @@ function IntegrationsView() {
 
 /* -------------------------------------------------------------- Diagnostics view */
 
-type PrerequisiteStatus = {
-  available: boolean;
-  version: string | null;
-  error?: string;
-};
-
-type SystemInfo = {
-  appVersion: string;
-  platform: string;
-  arch: string;
-  osRelease: string;
-  hostname: string;
-  homeDir: string;
-};
-
 function DiagnosticsView() {
-  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
-  const [checks, setChecks] = useState<Record<string, PrerequisiteStatus> | null>(null);
+  const [inventory, setInventory] = useState<LocalInventory | null>(null);
   const [loading, setLoading] = useState(false);
   const desktopAvailable = Boolean(window.conductor);
 
@@ -1025,12 +1009,8 @@ function DiagnosticsView() {
     if (!window.conductor) return;
     setLoading(true);
     try {
-      const [info, prerequisites] = await Promise.all([
-        window.conductor.system.getInfo(),
-        window.conductor.system.checkPrerequisites(),
-      ]);
-      setSystemInfo(info);
-      setChecks(prerequisites);
+      const nextInventory = await window.conductor.system.collectInventory();
+      setInventory(nextInventory);
     } finally {
       setLoading(false);
     }
@@ -1059,49 +1039,76 @@ function DiagnosticsView() {
     );
   }
 
-  const entries = Object.entries(checks ?? {});
-  const availableCount = entries.filter(([, check]) => check.available).length;
+  const toolEntries = Object.entries(inventory?.tools ?? {});
+  const serviceEntries = Object.entries(inventory?.services ?? {});
+  const configEntries = Object.entries(inventory?.configs ?? {});
+  const availableCount = toolEntries.filter(([, check]) => check.available).length;
+  const runningCount = serviceEntries.filter(([, service]) => service.running).length;
 
   return (
     <div className="diagnostics-grid">
       <div className="card diagnostic-hero">
-        <span className="eyebrow">Desktop foundation</span>
-        <h2>Local system diagnostics</h2>
+        <span className="eyebrow">Local agent discovery</span>
+        <h2>Agent runtime inventory</h2>
         <p>
-          Conductor can now query the local machine through a narrow Electron IPC bridge. This is the first
-          building block for guided installs, provider setup, health checks, and agent runtime management.
+          Conductor now collects a sanitized local inventory through the Electron main process: installed CLIs,
+          running agent services, listener ports, config file presence, and secret presence without exposing values.
         </p>
         <div className="actions">
           <button className="btn-ghost primary" onClick={runChecks} disabled={loading}>
-            {loading ? 'Checking…' : 'Refresh checks'}
+            {loading ? 'Scanning…' : 'Refresh diagnostics'}
           </button>
-          <span className="hint">{checks ? `${availableCount} of ${entries.length} tools found` : 'Awaiting checks'}</span>
+          <span className="hint">
+            {inventory ? `${availableCount} tools · ${runningCount} services running` : 'Awaiting local scan'}
+          </span>
         </div>
       </div>
 
-      {systemInfo && (
+      {inventory && (
         <div className="card diagnostic-panel">
           <div className="section-head compact">
             <h2>Machine</h2>
-            <span className="hint">Conductor {systemInfo.appVersion}</span>
+            <span className="hint">Collected {new Date(inventory.collectedAt).toLocaleTimeString()}</span>
           </div>
           <div className="kv-grid">
-            <div><span>Platform</span><strong>{systemInfo.platform}</strong></div>
-            <div><span>Architecture</span><strong>{systemInfo.arch}</strong></div>
-            <div><span>OS release</span><strong>{systemInfo.osRelease}</strong></div>
-            <div><span>Hostname</span><strong>{systemInfo.hostname}</strong></div>
-            <div className="wide"><span>Home directory</span><strong>{systemInfo.homeDir}</strong></div>
+            <div><span>Platform</span><strong>{inventory.machine.platform}</strong></div>
+            <div><span>Architecture</span><strong>{inventory.machine.arch}</strong></div>
+            <div><span>OS release</span><strong>{inventory.machine.osRelease}</strong></div>
+            <div><span>Hostname</span><strong>{inventory.machine.hostname}</strong></div>
+            <div className="wide"><span>Home directory</span><strong>{inventory.machine.homeDir}</strong></div>
           </div>
         </div>
       )}
 
       <div className="card diagnostic-panel wide-panel">
         <div className="section-head compact">
-          <h2>Agent tooling prerequisites</h2>
-          <span className="hint">Install readiness</span>
+          <h2>Agent services</h2>
+          <span className="hint">Process and port health</span>
         </div>
         <div className="check-list">
-          {entries.map(([name, check]) => (
+          {serviceEntries.map(([name, service]) => (
+            <div className="check-row" key={name}>
+              <span className={`status-dot ${service.running ? 'ok' : 'missing'}`} />
+              <div>
+                <strong>{service.label}</strong>
+                <span>{service.port ? `Expected port ${service.port}` : 'Process detection'}</span>
+              </div>
+              <span className={`chip ${service.running ? 'chip-ok' : 'chip-muted'}`}>
+                {service.running ? 'Running' : 'Stopped'}
+              </span>
+            </div>
+          ))}
+          {!serviceEntries.length && <p className="empty-state">Run the desktop app to collect service status.</p>}
+        </div>
+      </div>
+
+      <div className="card diagnostic-panel wide-panel">
+        <div className="section-head compact">
+          <h2>Agent tooling</h2>
+          <span className="hint">Installed CLI readiness</span>
+        </div>
+        <div className="check-list">
+          {toolEntries.map(([name, check]) => (
             <div className="check-row" key={name}>
               <span className={`status-dot ${check.available ? 'ok' : 'missing'}`} />
               <div>
@@ -1113,7 +1120,32 @@ function DiagnosticsView() {
               </span>
             </div>
           ))}
-          {!entries.length && <p className="empty-state">Run the desktop app to collect prerequisite status.</p>}
+          {!toolEntries.length && <p className="empty-state">Run the desktop app to collect tool status.</p>}
+        </div>
+      </div>
+
+      <div className="card diagnostic-panel wide-panel">
+        <div className="section-head compact">
+          <h2>Configuration</h2>
+          <span className="hint">Presence only, values redacted</span>
+        </div>
+        <div className="check-list">
+          {configEntries.map(([name, config]) => (
+            <div className="check-row" key={name}>
+              <span className={`status-dot ${config.exists ? 'ok' : 'missing'}`} />
+              <div>
+                <strong>{name}</strong>
+                <span>{config.path}</span>
+                {config.secrets && Object.keys(config.secrets).length > 0 && (
+                  <span>Secrets present: {Object.keys(config.secrets).join(', ')}</span>
+                )}
+              </div>
+              <span className={`chip ${config.exists ? 'chip-ok' : 'chip-muted'}`}>
+                {config.exists ? 'Found' : 'Missing'}
+              </span>
+            </div>
+          ))}
+          {!configEntries.length && <p className="empty-state">Run the desktop app to collect config status.</p>}
         </div>
       </div>
     </div>
