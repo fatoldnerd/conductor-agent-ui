@@ -11,6 +11,7 @@ export type SystemInfo = {
   osRelease: string;
   hostname: string;
   homeDir: string;
+  desktopCapable?: boolean;
 };
 
 export type InventoryToolStatus = {
@@ -29,6 +30,15 @@ export type InventoryServiceStatus = {
   port?: number;
 };
 
+export type InventoryAgentStatus = {
+  id: string;
+  name: string;
+  platform: 'openclaw' | 'hermes' | string;
+  running: boolean;
+  status: 'running' | 'stopped';
+  port?: number;
+};
+
 export type InventoryConfigStatus = {
   id: string;
   path: string;
@@ -39,9 +49,15 @@ export type InventoryConfigStatus = {
 
 export type LocalInventory = {
   collectedAt: string;
+  desktopSmoke: {
+    bridgeExpected: boolean;
+    platformSupported: boolean;
+    status: 'ready' | 'needs_attention';
+  };
   machine: Omit<SystemInfo, 'appVersion'>;
   tools: Record<string, InventoryToolStatus>;
   services: Record<string, InventoryServiceStatus>;
+  agents: Record<string, InventoryAgentStatus>;
   configs: Record<string, InventoryConfigStatus>;
 };
 

@@ -128,22 +128,56 @@ function includesAny(haystack, needles) {
   return needles.some((needle) => value.includes(needle));
 }
 
+async function collectPortSnapshot(deps) {
+  const primary = await runCommand(deps, 'ss', ['-ltnp']);
+  if (primary.ok) return primary;
+  return runCommand(deps, 'lsof', ['-nP', '-iTCP', '-sTCP:LISTEN']);
+}
+
+function hasPort(output, port) {
+  return new RegExp(`[:.]${port}\\b`).test(String(output || ''));
+}
+
+function detectOpenClawAgents(portOutput, processOutput) {
+  const processText = String(processOutput || '').toLowerCase();
+  const agentSpecs = [
+    ['hugo', 'Hugo', 18789],
+    ['kestrel', 'Kestrel', 18790],
+  ];
+
+  return Object.fromEntries(agentSpecs.map(([id, name, port]) => {
+    const running = hasPort(portOutput, port) || includesAny(processText, [id]);
+    return [id, {
+      id,
+      name,
+      platform: 'openclaw',
+      running,
+      status: running ? 'running' : 'stopped',
+      port,
+    }];
+  }));
+}
+
 async function collectServiceStatus(deps) {
   const [ports, processes] = await Promise.all([
-    runCommand(deps, 'ss', ['-ltnp']),
+    collectPortSnapshot(deps),
     runCommand(deps, 'ps', ['-eo', 'pid,comm,args']),
   ]);
   const portOutput = `${ports.stdout}\n${ports.stderr}`;
   const processOutput = `${processes.stdout}\n${processes.stderr}`;
 
-  const hasPort = (port) => new RegExp(`[:.]${port}\\b`).test(portOutput);
   const hasProcess = (...needles) => includesAny(processOutput, needles);
+  const openClawAgents = detectOpenClawAgents(portOutput, processOutput);
+  const openClawRunning = hasProcess('openclaw') || Object.values(openClawAgents).some((agent) => agent.running);
 
   return {
-    hermesGateway: serviceStatus('hermesGateway', 'Hermes gateway', hasProcess('hermes gateway run', 'hermes_cli.main gateway'), {}),
-    hermesDashboard: serviceStatus('hermesDashboard', 'Hermes dashboard', hasPort(9119) || hasProcess('hermes dashboard'), { port: 9119 }),
-    hermesApi: serviceStatus('hermesApi', 'Hermes API server', hasPort(8642) || hasProcess('api-server', 'api_server'), { port: 8642 }),
-    openclaw: serviceStatus('openclaw', 'OpenClaw runtime', hasProcess('openclaw', 'hugo gateway', 'kestrel'), {}),
+    services: {
+      hermesGateway: serviceStatus('hermesGateway', 'Hermes gateway', hasProcess('hermes gateway run', 'hermes_cli.main gateway'), {}),
+      hermesDashboard: serviceStatus('hermesDashboard', 'Hermes dashboard', hasPort(portOutput, 9119) || hasProcess('hermes dashboard'), { port: 9119 }),
+      hermesApi: serviceStatus('hermesApi', 'Hermes API server', hasPort(portOutput, 8642) || hasProcess('api-server', 'api_server'), { port: 8642 }),
+      openclaw: serviceStatus('openclaw', 'OpenClaw runtime', openClawRunning, {}),
+    },
+    agents: openClawAgents,
   };
 }
 
@@ -153,24 +187,33 @@ async function collectLocalInventory(overrides = {}) {
   const toolEntries = await Promise.all(TOOL_SPECS.map(async ([id, command, args]) => [id, await checkTool(deps, id, command, args)]));
   const hermesDir = path.join(homeDir, '.hermes');
 
-  const [services, hermesConfig, hermesEnv, openclawConfig] = await Promise.all([
+  const [serviceInventory, hermesConfig, hermesEnv, openclawConfig] = await Promise.all([
     collectServiceStatus(deps),
     readConfigStatus(deps, 'hermesConfig', path.join(hermesDir, 'config.yaml')),
     readConfigStatus(deps, 'hermesEnv', path.join(hermesDir, '.env'), true),
     readConfigStatus(deps, 'openclawConfig', path.join(homeDir, '.openclaw', 'config.yaml')),
   ]);
+  const desktopCapable = ['darwin', 'win32', 'linux'].includes(deps.platform);
+  const hasCoreDesktopTooling = ['git', 'node', 'npm'].every((tool) => Object.fromEntries(toolEntries)[tool]?.available);
 
   return {
     collectedAt: new Date().toISOString(),
+    desktopSmoke: {
+      bridgeExpected: true,
+      platformSupported: desktopCapable,
+      status: desktopCapable && hasCoreDesktopTooling ? 'ready' : 'needs_attention',
+    },
     machine: {
       platform: deps.platform,
       arch: deps.arch,
       osRelease: deps.release(),
       hostname: deps.hostname(),
       homeDir,
+      desktopCapable,
     },
     tools: Object.fromEntries(toolEntries),
-    services,
+    services: serviceInventory.services,
+    agents: serviceInventory.agents,
     configs: {
       hermesConfig,
       hermesEnv,

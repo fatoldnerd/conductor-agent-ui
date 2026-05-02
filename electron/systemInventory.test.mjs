@@ -71,4 +71,52 @@ describe('collectLocalInventory', () => {
     expect(JSON.stringify(inventory)).not.toContain('PLAIN_VALUE');
     expect(JSON.stringify(inventory)).not.toContain('visible');
   });
+
+  it('detects Hugo and Kestrel as local OpenClaw agents on macOS desktop hosts', async () => {
+    const files = new Set(['/Users/brad/.openclaw/config.yaml']);
+    const commands = {
+      'git --version': ok('git version 2.45.0\n'),
+      'node --version': ok('v22.1.0\n'),
+      'npm --version': ok('10.9.4\n'),
+      'pnpm --version': ok('10.33.2\n'),
+      'tmux -V': ok('tmux 3.4\n'),
+      'hermes --version': missing,
+      'openclaw --version': ok('OpenClaw 2026.4.10\n'),
+      'claude --version': ok('2.1.126 (Claude Code)\n'),
+      'codex --version': ok('codex-cli 0.128.0\n'),
+      'vercel --version': missing,
+      'netlify --version': missing,
+      'ss -ltnp': Object.assign(new Error('ss missing on macOS'), { code: 'ENOENT' }),
+      'lsof -nP -iTCP -sTCP:LISTEN': ok('node 100 brad 21u IPv4 TCP 127.0.0.1:18789 (LISTEN)\nnode 101 brad 22u IPv4 TCP 127.0.0.1:18790 (LISTEN)\n'),
+      'ps -eo pid,comm,args': ok('100 node /Users/brad/.openclaw/agents/hugo gateway --port 18789\n101 node /Users/brad/.openclaw/agents/kestrel gateway --port 18790\n'),
+    };
+
+    const inventory = await collectLocalInventory({
+      homedir: () => '/Users/brad',
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'brads-mac-mini',
+      release: () => '24.6.0',
+      async execFile(command, args = []) {
+        const key = [command, ...args].join(' ');
+        const result = commands[key];
+        if (result instanceof Error) throw result;
+        if (!result) throw new Error(`unexpected command ${key}`);
+        return result;
+      },
+      async access(filePath) {
+        if (!files.has(filePath)) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return 'agents:\n  - hugo\n  - kestrel\n';
+      },
+    });
+
+    expect(inventory.machine.desktopCapable).toBe(true);
+    expect(inventory.configs.openclawConfig).toMatchObject({ exists: true, path: '/Users/brad/.openclaw/config.yaml' });
+    expect(inventory.services.openclaw).toMatchObject({ running: true });
+    expect(inventory.agents.hugo).toMatchObject({ name: 'Hugo', platform: 'openclaw', running: true, port: 18789 });
+    expect(inventory.agents.kestrel).toMatchObject({ name: 'Kestrel', platform: 'openclaw', running: true, port: 18790 });
+    expect(inventory.desktopSmoke).toMatchObject({ bridgeExpected: true, platformSupported: true, status: 'ready' });
+  });
 });
