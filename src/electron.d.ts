@@ -16,6 +16,10 @@ export type SystemInfo = {
 
 export type InventoryToolStatus = {
   id: string;
+  label: string;
+  command: string;
+  category: 'agent-runtime' | 'developer-prerequisite' | 'deployment-tool' | string;
+  recipeId?: string;
   available: boolean;
   status: 'ready' | 'missing';
   version: string | null;

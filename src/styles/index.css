@@ -1287,6 +1287,107 @@ a {
   gap: 6px;
 }
 
+.local-tools-page {
+  display: grid;
+  gap: 14px;
+}
+.local-tools-hero {
+  padding: 18px;
+}
+.local-tools-hero h2 {
+  margin: 18px 0 8px;
+  color: var(--text);
+  font-size: 24px;
+  letter-spacing: -0.45px;
+}
+.local-tools-hero p {
+  max-width: 860px;
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+  font-size: 13.5px;
+}
+.local-tools-hero .actions {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.local-tools-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.local-tool-section,
+.install-preview-panel {
+  padding: 18px;
+}
+.local-tool-list,
+.install-step-list.compact {
+  display: grid;
+  gap: 8px;
+}
+.local-tool-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.025);
+}
+.local-tool-main {
+  min-width: 0;
+}
+.local-tool-main strong,
+.install-preview-head strong,
+.install-step strong {
+  display: block;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.local-tool-main span,
+.install-preview-head span,
+.install-step span:not(.step-number):not(.chip) {
+  display: block;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.install-preview-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.install-step {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.025);
+}
+.step-number {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 /* ------------------------------------------------------------------
    Misc
 ------------------------------------------------------------------- */
@@ -1514,6 +1615,17 @@ a {
 @media (max-width: 1180px) {
   .diagnostics-grid {
     grid-template-columns: 1fr;
+  }
+  .local-tools-sections {
+    grid-template-columns: 1fr;
+  }
+  .local-tool-row {
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+  }
+  .local-tool-row .btn-ghost,
+  .local-tool-row > .hint {
+    grid-column: 2 / -1;
+    justify-self: start;
   }
 }
 

@@ -7,17 +7,20 @@ const { promisify } = require('node:util');
 const execFileAsync = promisify(execFileCb);
 
 const TOOL_SPECS = [
-  ['hermes', 'hermes', ['--version']],
-  ['openclaw', 'openclaw', ['--version']],
-  ['claude', 'claude', ['--version']],
-  ['codex', 'codex', ['--version']],
-  ['git', 'git', ['--version']],
-  ['node', 'node', ['--version']],
-  ['npm', 'npm', ['--version']],
-  ['pnpm', 'pnpm', ['--version']],
-  ['tmux', 'tmux', ['-V']],
-  ['vercel', 'vercel', ['--version']],
-  ['netlify', 'netlify', ['--version']],
+  { id: 'openclaw', label: 'OpenClaw', command: 'openclaw', args: ['--version'], category: 'agent-runtime', recipeId: 'openclaw' },
+  { id: 'hermes', label: 'Hermes Agent', command: 'hermes', args: ['--version'], category: 'agent-runtime', recipeId: 'hermes-agent' },
+  { id: 'claude', label: 'Claude Code', command: 'claude', args: ['--version'], category: 'agent-runtime', recipeId: 'claude-code' },
+  { id: 'codex', label: 'Codex CLI', command: 'codex', args: ['--version'], category: 'agent-runtime', recipeId: 'codex-cli' },
+  { id: 'gemini', label: 'Gemini CLI', command: 'gemini', args: ['--version'], category: 'agent-runtime', recipeId: 'gemini-cli' },
+  { id: 'git', label: 'Git', command: 'git', args: ['--version'], category: 'developer-prerequisite' },
+  { id: 'node', label: 'Node.js', command: 'node', args: ['--version'], category: 'developer-prerequisite' },
+  { id: 'npm', label: 'npm', command: 'npm', args: ['--version'], category: 'developer-prerequisite' },
+  { id: 'pnpm', label: 'pnpm', command: 'pnpm', args: ['--version'], category: 'developer-prerequisite' },
+  { id: 'python3', label: 'Python 3', command: 'python3', args: ['--version'], category: 'developer-prerequisite' },
+  { id: 'curl', label: 'curl', command: 'curl', args: ['--version'], category: 'developer-prerequisite' },
+  { id: 'tmux', label: 'tmux', command: 'tmux', args: ['-V'], category: 'developer-prerequisite' },
+  { id: 'vercel', label: 'Vercel CLI', command: 'vercel', args: ['--version'], category: 'deployment-tool' },
+  { id: 'netlify', label: 'Netlify CLI', command: 'netlify', args: ['--version'], category: 'deployment-tool' },
 ];
 
 const SECRET_KEYS = ['GITHUB_TOKEN', 'VERCEL_TOKEN', 'NETLIFY_AUTH_TOKEN', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY'];
@@ -62,11 +65,16 @@ async function runCommand(deps, command, args = []) {
   }
 }
 
-async function checkTool(deps, id, command, args) {
+async function checkTool(deps, spec) {
+  const { id, label, command, args, category, recipeId } = spec;
   const result = await runCommand(deps, command, args);
   if (!result.ok) {
     return {
       id,
+      label,
+      command,
+      category,
+      recipeId,
       available: false,
       status: 'missing',
       version: null,
@@ -75,6 +83,10 @@ async function checkTool(deps, id, command, args) {
   }
   return {
     id,
+    label,
+    command,
+    category,
+    recipeId,
     available: true,
     status: 'ready',
     version: firstLine(result.stdout || result.stderr) || 'available',
@@ -163,7 +175,7 @@ async function collectServiceStatus(deps) {
 async function collectLocalInventory(overrides = {}) {
   const deps = { ...defaultDeps(), ...overrides };
   const homeDir = deps.homedir();
-  const toolEntries = await Promise.all(TOOL_SPECS.map(async ([id, command, args]) => [id, await checkTool(deps, id, command, args)]));
+  const toolEntries = await Promise.all(TOOL_SPECS.map(async (spec) => [spec.id, await checkTool(deps, spec)]));
   const hermesDir = path.join(homeDir, '.hermes');
 
   const [serviceInventory, hermesConfig, hermesEnv, openclawConfig] = await Promise.all([

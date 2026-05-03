@@ -9,9 +9,15 @@ function createFakeDeps() {
   const commands = {
     'git --version': ok('git version 2.45.0\n'),
     'node --version': ok('v22.1.0\n'),
+    'npm --version': ok('10.9.4\n'),
+    'pnpm --version': ok('10.33.2\n'),
+    'python3 --version': ok('Python 3.12.2\n'),
+    'curl --version': ok('curl 8.7.1\n'),
     'hermes --version': ok('Hermes Agent v0.12.0\nProject: /home/brad/.hermes/hermes-agent\n'),
+    'openclaw --version': missing,
     'claude --version': missing,
     'codex --version': ok('codex-cli 1.2.3\n'),
+    'gemini --version': missing,
     'tmux -V': ok('tmux 3.4\n'),
     'vercel --version': ok('Vercel CLI 53.1.0\n'),
     'netlify --version': missing,
@@ -55,6 +61,7 @@ describe('collectLocalInventory', () => {
 
     expect(inventory.tools.hermes).toMatchObject({ available: true, status: 'ready' });
     expect(inventory.tools.claude).toMatchObject({ available: false, status: 'missing' });
+    expect(inventory.tools.gemini).toMatchObject({ available: false, label: 'Gemini CLI', recipeId: 'gemini-cli' });
     expect(inventory.tools.tmux.version).toBe('tmux 3.4');
 
     expect(inventory.services.hermesGateway).toMatchObject({ running: true, status: 'running' });
@@ -79,11 +86,14 @@ describe('collectLocalInventory', () => {
       'node --version': ok('v22.1.0\n'),
       'npm --version': ok('10.9.4\n'),
       'pnpm --version': ok('10.33.2\n'),
+      'python3 --version': ok('Python 3.12.2\n'),
+      'curl --version': ok('curl 8.7.1\n'),
       'tmux -V': ok('tmux 3.4\n'),
       'hermes --version': missing,
       'openclaw --version': ok('OpenClaw 2026.4.10\n'),
       'claude --version': ok('2.1.126 (Claude Code)\n'),
       'codex --version': ok('codex-cli 0.128.0\n'),
+      'gemini --version': ok('0.1.12\n'),
       'vercel --version': missing,
       'netlify --version': missing,
       'ss -ltnp': Object.assign(new Error('ss missing on macOS'), { code: 'ENOENT' }),
