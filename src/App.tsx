@@ -1041,7 +1041,6 @@ function DiagnosticsView() {
 
   const toolEntries = Object.entries(inventory?.tools ?? {});
   const serviceEntries = Object.entries(inventory?.services ?? {});
-  const agentEntries = Object.entries(inventory?.agents ?? {});
   const configEntries = Object.entries(inventory?.configs ?? {});
   const availableCount = toolEntries.filter(([, check]) => check.available).length;
   const runningCount = serviceEntries.filter(([, service]) => service.running).length;
@@ -1102,28 +1101,6 @@ function DiagnosticsView() {
             </div>
           ))}
           {!serviceEntries.length && <p className="empty-state">Run the desktop app to collect service status.</p>}
-        </div>
-      </div>
-
-      <div className="card diagnostic-panel wide-panel">
-        <div className="section-head compact">
-          <h2>Local OpenClaw agents</h2>
-          <span className="hint">Mac Mini desktop target</span>
-        </div>
-        <div className="check-list">
-          {agentEntries.map(([name, agent]) => (
-            <div className="check-row" key={name}>
-              <span className={`status-dot ${agent.running ? 'ok' : 'missing'}`} />
-              <div>
-                <strong>{agent.name}</strong>
-                <span>{agent.port ? `${agent.platform} gateway port ${agent.port}` : agent.platform}</span>
-              </div>
-              <span className={`chip ${agent.running ? 'chip-ok' : 'chip-muted'}`}>
-                {agent.running ? 'Running' : 'Stopped'}
-              </span>
-            </div>
-          ))}
-          {!agentEntries.length && <p className="empty-state">Run Conductor on the Mac desktop host to detect local OpenClaw agents.</p>}
         </div>
       </div>
 

@@ -6,14 +6,6 @@ Conductor is a desktop app first. The hosted Vercel build is only a preview surf
 
 Use a real desktop host, ideally Brad's Mac Mini or laptop.
 
-Known Mac Mini context:
-
-- macOS desktop host
-- OpenClaw agents: Hugo and Kestrel
-- Expected local gateway ports:
-  - Hugo: `18789`
-  - Kestrel: `18790`
-
 Hermes currently runs on a headless VPS, so Hermes can build and validate the code but cannot visually smoke-test the Electron UI on the VPS.
 
 ## First-time setup on the Mac
@@ -40,9 +32,7 @@ Expected desktop signals:
 - Desktop bridge smoke status: `Ready`.
 - Machine platform: `darwin` on macOS.
 - Tooling statuses for OpenClaw, Claude Code, Codex, Node, npm, pnpm, git, tmux.
-- Local OpenClaw agents section shows Hugo and Kestrel.
-- Hugo should show port `18789` if running.
-- Kestrel should show port `18790` if running.
+- OpenClaw runtime status reflects a local OpenClaw process only. It should not show Brad-specific instance names from another machine.
 
 ## CLI smoke check
 
@@ -61,15 +51,11 @@ Expected shape:
     "bridgeExpected": true,
     "platformSupported": true,
     "status": "ready"
-  },
-  "agents": {
-    "hugo": { "running": true, "port": 18789 },
-    "kestrel": { "running": true, "port": 18790 }
   }
 }
 ```
 
-If Hugo or Kestrel are stopped, their `running` value may be `false`; that is a useful status, not necessarily a Conductor failure.
+If OpenClaw is not installed or running on the test Mac, its runtime status may be `stopped`; that is a useful status, not necessarily a Conductor failure.
 
 ## Build a local macOS artifact
 
@@ -93,7 +79,7 @@ ci-templates/desktop-macos.yml
 
 It builds an unsigned macOS artifact on a real macOS runner and uploads `release/` as an artifact. It does not publish a release and does not sign/notarize yet.
 
-Note: the current GitHub token available to Hermes cannot push active `.github/workflows/*` files because it lacks the `workflow` scope. To activate the workflow, copy the template to `.github/workflows/desktop-macos.yml` using a GitHub token/account with workflow permission.
+The active workflow is now checked in at `.github/workflows/desktop-macos.yml`.
 
 ## Before pushing desktop changes
 

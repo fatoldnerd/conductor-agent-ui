@@ -138,26 +138,6 @@ function hasPort(output, port) {
   return new RegExp(`[:.]${port}\\b`).test(String(output || ''));
 }
 
-function detectOpenClawAgents(portOutput, processOutput) {
-  const processText = String(processOutput || '').toLowerCase();
-  const agentSpecs = [
-    ['hugo', 'Hugo', 18789],
-    ['kestrel', 'Kestrel', 18790],
-  ];
-
-  return Object.fromEntries(agentSpecs.map(([id, name, port]) => {
-    const running = hasPort(portOutput, port) || includesAny(processText, [id]);
-    return [id, {
-      id,
-      name,
-      platform: 'openclaw',
-      running,
-      status: running ? 'running' : 'stopped',
-      port,
-    }];
-  }));
-}
-
 async function collectServiceStatus(deps) {
   const [ports, processes] = await Promise.all([
     collectPortSnapshot(deps),
@@ -167,8 +147,7 @@ async function collectServiceStatus(deps) {
   const processOutput = `${processes.stdout}\n${processes.stderr}`;
 
   const hasProcess = (...needles) => includesAny(processOutput, needles);
-  const openClawAgents = detectOpenClawAgents(portOutput, processOutput);
-  const openClawRunning = hasProcess('openclaw') || Object.values(openClawAgents).some((agent) => agent.running);
+  const openClawRunning = hasProcess('openclaw');
 
   return {
     services: {
@@ -177,7 +156,7 @@ async function collectServiceStatus(deps) {
       hermesApi: serviceStatus('hermesApi', 'Hermes API server', hasPort(portOutput, 8642) || hasProcess('api-server', 'api_server'), { port: 8642 }),
       openclaw: serviceStatus('openclaw', 'OpenClaw runtime', openClawRunning, {}),
     },
-    agents: openClawAgents,
+    agents: {},
   };
 }
 

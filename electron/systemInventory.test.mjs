@@ -16,7 +16,7 @@ function createFakeDeps() {
     'vercel --version': ok('Vercel CLI 53.1.0\n'),
     'netlify --version': missing,
     'ss -ltnp': ok('LISTEN 0 4096 127.0.0.1:9119 0.0.0.0:* users:(("hermes",pid=11,fd=8))\nLISTEN 0 4096 127.0.0.1:8642 0.0.0.0:* users:(("hermes",pid=12,fd=8))\n'),
-    'ps -eo pid,comm,args': ok('   11 hermes /venv/bin/python -m hermes_cli.main gateway run --replace\n   12 hermes /venv/bin/python /root/.local/bin/hermes api-server\n   42 node /Users/brad/OpenClaw/hugo gateway\n'),
+    'ps -eo pid,comm,args': ok('   11 hermes /venv/bin/python -m hermes_cli.main gateway run --replace\n   12 hermes /venv/bin/python /root/.local/bin/hermes api-server\n   42 node /Users/brad/.openclaw/runtime gateway\n'),
   };
 
   return {
@@ -72,7 +72,7 @@ describe('collectLocalInventory', () => {
     expect(JSON.stringify(inventory)).not.toContain('visible');
   });
 
-  it('detects Hugo and Kestrel as local OpenClaw agents on macOS desktop hosts', async () => {
+  it('detects a local OpenClaw runtime on macOS without hardcoded personal agent names', async () => {
     const files = new Set(['/Users/brad/.openclaw/config.yaml']);
     const commands = {
       'git --version': ok('git version 2.45.0\n'),
@@ -87,8 +87,8 @@ describe('collectLocalInventory', () => {
       'vercel --version': missing,
       'netlify --version': missing,
       'ss -ltnp': Object.assign(new Error('ss missing on macOS'), { code: 'ENOENT' }),
-      'lsof -nP -iTCP -sTCP:LISTEN': ok('node 100 brad 21u IPv4 TCP 127.0.0.1:18789 (LISTEN)\nnode 101 brad 22u IPv4 TCP 127.0.0.1:18790 (LISTEN)\n'),
-      'ps -eo pid,comm,args': ok('100 node /Users/brad/.openclaw/agents/hugo gateway --port 18789\n101 node /Users/brad/.openclaw/agents/kestrel gateway --port 18790\n'),
+      'lsof -nP -iTCP -sTCP:LISTEN': ok('node 100 brad 21u IPv4 TCP 127.0.0.1:3000 (LISTEN)\n'),
+      'ps -eo pid,comm,args': ok('100 node /Users/brad/.openclaw/runtime gateway --port 3000\n'),
     };
 
     const inventory = await collectLocalInventory({
@@ -108,15 +108,14 @@ describe('collectLocalInventory', () => {
         if (!files.has(filePath)) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
       },
       async readFile() {
-        return 'agents:\n  - hugo\n  - kestrel\n';
+        return 'agents: []\n';
       },
     });
 
     expect(inventory.machine.desktopCapable).toBe(true);
     expect(inventory.configs.openclawConfig).toMatchObject({ exists: true, path: '/Users/brad/.openclaw/config.yaml' });
     expect(inventory.services.openclaw).toMatchObject({ running: true });
-    expect(inventory.agents.hugo).toMatchObject({ name: 'Hugo', platform: 'openclaw', running: true, port: 18789 });
-    expect(inventory.agents.kestrel).toMatchObject({ name: 'Kestrel', platform: 'openclaw', running: true, port: 18790 });
+    expect(inventory.agents).toEqual({});
     expect(inventory.desktopSmoke).toMatchObject({ bridgeExpected: true, platformSupported: true, status: 'ready' });
   });
 });
