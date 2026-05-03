@@ -8,6 +8,8 @@ on:
       - 'src/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'vite.config.test.ts'
       - '.github/workflows/desktop-macos.yml'
   push:
     branches: [main]
@@ -16,6 +18,8 @@ on:
       - 'src/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'vite.config.test.ts'
       - '.github/workflows/desktop-macos.yml'
 
 jobs:
