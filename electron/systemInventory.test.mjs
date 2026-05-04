@@ -283,6 +283,48 @@ describe('collectLocalInventory', () => {
     expect(inventory.tools.codex).toMatchObject({ available: false, status: 'missing' });
   });
 
+  it('passes enriched PATH to Homebrew shims so Codex can find node from env shebangs', async () => {
+    const seen = [];
+    const inventory = await collectLocalInventory({
+      homedir: () => '/Users/brad',
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'macbook',
+      release: () => '24.6.0',
+      env: { PATH: '/usr/bin:/bin' },
+      async execFile(command, args = [], options = {}) {
+        seen.push({ command, args, path: options.env?.PATH });
+        if (command === '/opt/homebrew/bin/codex') {
+          if (!String(options.env?.PATH || '').split(':').includes('/opt/homebrew/bin')) {
+            throw Object.assign(new Error('/usr/bin/env: node: No such file or directory'), { code: 127 });
+          }
+          return ok('codex-cli 0.128.0\n');
+        }
+        if (command === '/opt/homebrew/bin/node') return ok('v22.2.0\n');
+        if (command === '/opt/homebrew/bin/npm') return ok('10.9.4\n');
+        if (command === '/opt/homebrew/bin/claude') return ok('2.1.126 (Claude Code)\n');
+        if (command === '/opt/homebrew/bin/gemini') return ok('0.1.12\n');
+        if (command === '/usr/bin/python3') return ok('Python 3.12.2\n');
+        if (command === '/usr/bin/curl') return ok('curl 8.7.1\n');
+        if (command === 'git') return ok('git version 2.45.0\n');
+        if (command === 'ss' || command === 'lsof' || command === 'ps') return ok('');
+        throw missing;
+      },
+      async access() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return '';
+      },
+      async readdir() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+    });
+
+    expect(inventory.tools.codex).toMatchObject({ available: true, version: 'codex-cli 0.128.0' });
+    expect(seen.find((call) => call.command === '/opt/homebrew/bin/codex')?.path).toContain('/opt/homebrew/bin');
+  });
+
   it('detects macOS CLIs from Homebrew-style fallback paths when Electron PATH is sparse', async () => {
     const commands = {
       'git --version': ok('git version 2.45.0\n'),

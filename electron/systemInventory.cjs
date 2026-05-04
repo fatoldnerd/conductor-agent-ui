@@ -165,9 +165,20 @@ async function runViaLoginShell(deps, command, args = []) {
   }
 }
 
+function enrichedCommandEnv(deps, dirs) {
+  const existingPath = deps.env?.PATH || process.env.PATH || '';
+  const pathPrefix = dirs.join(path.delimiter);
+  return {
+    ...(deps.env || process.env),
+    PATH: `${pathPrefix}${path.delimiter}${existingPath}`,
+  };
+}
+
 async function runCommand(deps, command, args = []) {
+  const dirs = await commandSearchDirs(deps);
+  const env = enrichedCommandEnv(deps, dirs);
   try {
-    return await execTool(deps, command, args);
+    return await execTool(deps, command, args, { env });
   } catch (error) {
     const directError = {
       ok: false,
@@ -178,11 +189,10 @@ async function runCommand(deps, command, args = []) {
 
     if (!isNotFound(error)) return directError;
 
-    const dirs = await commandSearchDirs(deps);
     for (const dir of dirs) {
       const candidate = path.join(dir, command);
       try {
-        return await execTool(deps, candidate, args);
+        return await execTool(deps, candidate, args, { env });
       } catch (candidateError) {
         if (!isNotFound(candidateError)) {
           return {
