@@ -30,6 +30,7 @@ import {
   type LocalToolItem,
 } from './localTools';
 import { runtimeAvailable } from './agentRuntimeAvailability';
+import { deriveInventoryViewState } from './inventoryViewState';
 import type {
   AgentRunEvent,
   AgentRunSnapshot,
@@ -185,13 +186,18 @@ function TopBar({ view }: { view: View }) {
 function DashboardView({ setView }: { setView: (v: View) => void }) {
   const [inventory, setInventory] = useState<LocalInventory | null>(null);
   const [loading, setLoading] = useState(false);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
   const desktopAvailable = Boolean(window.conductor);
 
   const runScan = async () => {
     if (!window.conductor) return;
     setLoading(true);
+    setInventoryError(null);
     try {
       setInventory(await window.conductor.system.collectInventory());
+    } catch (err) {
+      setInventory(null);
+      setInventoryError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -203,6 +209,10 @@ function DashboardView({ setView }: { setView: (v: View) => void }) {
 
   const categories = useMemo(() => buildLocalToolCategories(inventory), [inventory]);
   const summary = useMemo(() => localToolSummary(categories), [categories]);
+  const inventoryState = useMemo(
+    () => deriveInventoryViewState({ desktopAvailable, loading, error: inventoryError, inventory, categories }),
+    [categories, desktopAvailable, inventory, inventoryError, loading],
+  );
   const installedTools = categories
     .flatMap((category) => category.items)
     .filter((item) => item.readiness === 'installed' || item.readiness === 'running' || item.readiness === 'needs_config');
@@ -214,15 +224,13 @@ function DashboardView({ setView }: { setView: (v: View) => void }) {
     return (
       <div className="local-tools-page">
         <div className="card local-tools-hero">
-          <span className="eyebrow">Desktop dashboard</span>
-          <h2>Live dashboard data requires the Conductor desktop app</h2>
-          <p>
-            The browser preview no longer shows fake connected tools, sample agents, or synthetic activity. Open the
-            Electron build to inspect installed runtimes, prerequisites, and local services on this Mac.
-          </p>
+          <span className="eyebrow">{inventoryState.eyebrow}</span>
+          <h2>{inventoryState.title}</h2>
+          <p>{inventoryState.body}</p>
           <div className="actions">
-            <button className="btn-ghost primary" disabled>Requires desktop bridge</button>
+            <button className="btn-ghost primary" disabled>{inventoryState.primaryAction}</button>
             <button className="btn-ghost" onClick={() => setView('tools')}>Open Agent Runtimes</button>
+            <span className="hint">{inventoryState.hint}</span>
           </div>
         </div>
       </div>
@@ -232,18 +240,15 @@ function DashboardView({ setView }: { setView: (v: View) => void }) {
   return (
     <div className="local-tools-page">
       <div className="card local-tools-hero">
-        <span className="eyebrow">Live local inventory</span>
-        <h2>Dashboard reflects only what is installed on this machine</h2>
-        <p>
-          Counts and tool lists are built from sanitized Electron inventory. Missing tools are handled on Agent
-          Runtimes, not shown here as fake connected integrations.
-        </p>
+        <span className="eyebrow">{inventoryState.eyebrow}</span>
+        <h2>{inventoryState.title}</h2>
+        <p>{inventoryState.body}</p>
         <div className="actions">
           <button className="btn-ghost primary" onClick={runScan} disabled={loading}>
-            {loading ? 'Scanning…' : 'Refresh inventory'}
+            {loading ? 'Scanning...' : inventoryState.primaryAction}
           </button>
           <button className="btn-ghost" onClick={() => setView('tools')}>Manage Agent Runtimes</button>
-          <span className="hint">{inventory ? 'Inventory loaded' : 'Awaiting local scan'}</span>
+          <span className="hint">{inventoryState.hint}</span>
         </div>
       </div>
 
@@ -352,6 +357,7 @@ function WorkflowsView() {
 function ToolsView({ setView }: { setView: (v: View) => void }) {
   const [inventory, setInventory] = useState<LocalInventory | null>(null);
   const [loading, setLoading] = useState(false);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<LocalToolAction['kind']>('preview_install');
   const desktopAvailable = Boolean(window.conductor);
@@ -359,8 +365,12 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
   const runScan = async () => {
     if (!window.conductor) return;
     setLoading(true);
+    setInventoryError(null);
     try {
       setInventory(await window.conductor.system.collectInventory());
+    } catch (err) {
+      setInventory(null);
+      setInventoryError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -372,6 +382,10 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
 
   const categories = useMemo(() => buildLocalToolCategories(inventory), [inventory]);
   const summary = useMemo(() => localToolSummary(categories), [categories]);
+  const inventoryState = useMemo(
+    () => deriveInventoryViewState({ desktopAvailable, loading, error: inventoryError, inventory, categories }),
+    [categories, desktopAvailable, inventory, inventoryError, loading],
+  );
   const selectedItem = categories.flatMap((category) => category.items).find((item) => item.recipeId === selectedRecipeId) ?? null;
   const selectedRecipe = selectedItem?.recipe ?? null;
   const selectedHealthChecks = selectedItem?.healthChecks ?? [];
@@ -390,16 +404,13 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
     return (
       <div className="local-tools-page">
         <div className="card local-tools-hero">
-          <span className="eyebrow">Desktop-only inventory</span>
-          <h2>Agent runtimes are managed by the desktop app</h2>
-          <p>
-            Browser preview cannot inspect installed CLIs, running local services, or configuration files because the
-            Electron preload bridge is unavailable. This page stays read-only here and does not execute commands.
-          </p>
+          <span className="eyebrow">{inventoryState.eyebrow}</span>
+          <h2>{inventoryState.title}</h2>
+          <p>{inventoryState.body}</p>
           <div className="actions">
-            <button className="btn-ghost primary" disabled>Requires desktop bridge</button>
+            <button className="btn-ghost primary" disabled>{inventoryState.primaryAction}</button>
             <button className="btn-ghost" onClick={() => setView('integrations')}>Open recipe previews</button>
-            <span className="hint">Run `npm run desktop:dev` for local inventory.</span>
+            <span className="hint">{inventoryState.hint}</span>
           </div>
         </div>
       </div>
@@ -409,22 +420,14 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
   return (
     <div className="local-tools-page">
       <div className="card local-tools-hero">
-        <span className="eyebrow">Primary runtime control</span>
-        <h2>Install, configure, and monitor local agent runtimes</h2>
-        <p>
-          Conductor uses sanitized Electron inventory for runtimes, prerequisites, deployment tools, and running
-          services. Actions preview trusted recipes and health checks; start/stop/install execution only belongs in
-          explicit allowlisted main-process flows.
-        </p>
+        <span className="eyebrow">{inventoryState.eyebrow}</span>
+        <h2>{inventoryState.title}</h2>
+        <p>{inventoryState.body}</p>
         <div className="actions">
           <button className="btn-ghost primary" onClick={runScan} disabled={loading}>
-            {loading ? 'Scanning…' : 'Refresh inventory'}
+            {loading ? 'Scanning...' : inventoryState.primaryAction}
           </button>
-          <span className="hint">
-            {inventory
-              ? `${summary.installed} ready · ${summary.needsConfig} need config · ${summary.missing} missing/stopped`
-              : 'Awaiting local scan'}
-          </span>
+          <span className="hint">{inventoryState.hint}</span>
         </div>
       </div>
 
@@ -812,14 +815,19 @@ function IntegrationsView() {
 function DiagnosticsView() {
   const [inventory, setInventory] = useState<LocalInventory | null>(null);
   const [loading, setLoading] = useState(false);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
   const desktopAvailable = Boolean(window.conductor);
 
   const runChecks = async () => {
     if (!window.conductor) return;
     setLoading(true);
+    setInventoryError(null);
     try {
       const nextInventory = await window.conductor.system.collectInventory();
       setInventory(nextInventory);
+    } catch (err) {
+      setInventory(null);
+      setInventoryError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -829,19 +837,22 @@ function DiagnosticsView() {
     runChecks();
   }, []);
 
+  const diagnosticCategories = useMemo(() => buildLocalToolCategories(inventory), [inventory]);
+  const inventoryState = useMemo(
+    () => deriveInventoryViewState({ desktopAvailable, loading, error: inventoryError, inventory, categories: diagnosticCategories }),
+    [desktopAvailable, diagnosticCategories, inventory, inventoryError, loading],
+  );
+
   if (!desktopAvailable) {
     return (
       <div className="diagnostics-grid">
         <div className="card diagnostic-hero">
-          <span className="eyebrow">Desktop foundation</span>
-          <h2>Electron shell not active</h2>
-          <p>
-            This web deployment is still useful for design review. The desktop build exposes local diagnostics,
-            prerequisite checks, and eventually install controls through the secure Electron bridge.
-          </p>
+          <span className="eyebrow">{inventoryState.eyebrow}</span>
+          <h2>{inventoryState.title}</h2>
+          <p>{inventoryState.body}</p>
           <div className="actions">
-            <button className="btn-ghost primary">Run as desktop app</button>
-            <span className="hint">Use npm run desktop:dev locally.</span>
+            <button className="btn-ghost primary" disabled>{inventoryState.primaryAction}</button>
+            <span className="hint">{inventoryState.hint}</span>
           </div>
         </div>
       </div>
@@ -862,19 +873,14 @@ function DiagnosticsView() {
   return (
     <div className="diagnostics-grid">
       <div className="card diagnostic-hero">
-        <span className="eyebrow">Local agent discovery</span>
-        <h2>Agent runtime inventory</h2>
-        <p>
-          Conductor now collects a sanitized local inventory through the Electron main process: installed CLIs,
-          running agent services, listener ports, config file presence, and secret presence without exposing values.
-        </p>
+        <span className="eyebrow">{inventoryState.eyebrow}</span>
+        <h2>{inventoryState.title}</h2>
+        <p>{inventoryState.body}</p>
         <div className="actions">
           <button className="btn-ghost primary" onClick={runChecks} disabled={loading}>
-            {loading ? 'Scanning…' : 'Refresh diagnostics'}
+            {loading ? 'Scanning...' : inventoryState.primaryAction}
           </button>
-          <span className="hint">
-            {inventory ? `${availableCount} tools · ${runningCount} services running` : 'Awaiting local scan'}
-          </span>
+          <span className="hint">{inventory ? `${availableCount} tools · ${runningCount} services running` : inventoryState.hint}</span>
         </div>
       </div>
 

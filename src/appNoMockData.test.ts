@@ -7,7 +7,6 @@ describe('production operational UI data sources', () => {
   });
 
   it('does not render known runtime rows in browser Agent Runtimes mode', () => {
-    expect(appSource).toContain('Browser preview cannot inspect installed CLIs');
     expect(appSource).not.toContain('AgentRuntimeBrowserPreview');
   });
 });
