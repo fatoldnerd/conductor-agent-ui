@@ -2,7 +2,7 @@ import type { InventoryConfigStatus, InventoryServiceStatus, InventoryToolStatus
 import { getIntegrationRecipe, listIntegrationRecipes, type IntegrationHealthCheck, type IntegrationRecipe } from './integrations/recipes';
 
 export type LocalToolCategoryId = 'agent-runtimes' | 'developer-prerequisites' | 'deployment-tools' | 'running-services';
-export type LocalToolReadiness = 'installed' | 'missing' | 'needs_config' | 'running' | 'stopped';
+export type LocalToolReadiness = 'installed' | 'missing' | 'needs_config' | 'running' | 'stopped' | 'not_scanned';
 export type LocalToolActionKind = 'preview_install' | 'configure' | 'health_check' | 'open_docs' | 'refresh' | 'coming_soon' | 'requires_desktop';
 
 export type LocalToolAction = {
@@ -89,7 +89,7 @@ export function fallbackInventoryTool(id: string, category: InventoryToolStatus[
     category,
     recipeId,
     available: false,
-    status: 'missing',
+    status: 'not_scanned',
     version: null,
     error: 'not scanned',
   };
@@ -102,12 +102,14 @@ function runtimeConfig(inventory: LocalInventory | null, id: string): InventoryC
 }
 
 function runtimeDetail(tool: InventoryToolStatus, config?: InventoryConfigStatus): string {
+  if (tool.status === 'not_scanned') return 'Awaiting desktop inventory scan';
   if (!tool.available) return tool.error ?? 'Not found in local PATH';
   if (config && !config.exists) return 'Installed, configuration not detected';
   return tool.version ?? 'Detected';
 }
 
 function runtimeReadiness(tool: InventoryToolStatus, config?: InventoryConfigStatus): LocalToolReadiness {
+  if (tool.status === 'not_scanned') return 'not_scanned';
   if (!tool.available) return 'missing';
   if (config && !config.exists) return 'needs_config';
   return 'installed';
@@ -154,9 +156,13 @@ function toToolItem(inventory: LocalInventory | null, id: string, categoryId: 'd
     label: tool.label,
     description: TOOL_DESCRIPTIONS[id] ?? 'Local command detected through the desktop inventory bridge.',
     categoryId,
-    readiness: tool.available ? 'installed' : 'missing',
+    readiness: tool.status === 'not_scanned' ? 'not_scanned' : tool.available ? 'installed' : 'missing',
     version: tool.version,
-    detail: tool.available ? tool.version ?? 'Detected' : tool.error ?? 'Not found in local PATH',
+    detail: tool.status === 'not_scanned'
+      ? 'Awaiting desktop inventory scan'
+      : tool.available
+        ? tool.version ?? 'Detected'
+        : tool.error ?? 'Not found in local PATH',
     recipeId: tool.recipeId,
     recipe: knownRecipe(tool.recipeId),
     healthChecks: [],
@@ -218,6 +224,7 @@ export function localToolSummary(categories: LocalToolCategory[]) {
     installed: items.filter((item) => item.readiness === 'installed' || item.readiness === 'running').length,
     missing: items.filter((item) => item.readiness === 'missing' || item.readiness === 'stopped').length,
     needsConfig: items.filter((item) => item.readiness === 'needs_config').length,
+    notScanned: items.filter((item) => item.readiness === 'not_scanned').length,
     recipes: listIntegrationRecipes().length,
   };
 }

@@ -86,16 +86,23 @@ describe('local tool inventory view model', () => {
     expect(hermes?.actions.map((action) => action.kind)).toContain('health_check');
   });
 
-  it('summarizes browser fallback state without live inventory', () => {
+  it('represents unscanned fallback tools as not scanned rather than missing', () => {
     const categories = buildLocalToolCategories(null);
     const summary = localToolSummary(categories);
+    const runtimes = categories.find((category) => category.id === 'agent-runtimes')?.items ?? [];
+    const prerequisites = categories.find((category) => category.id === 'developer-prerequisites')?.items ?? [];
 
-    expect(summary.missing).toBeGreaterThan(0);
+    expect(runtimes.every((item) => item.readiness === 'not_scanned')).toBe(true);
+    expect(prerequisites.every((item) => item.readiness === 'not_scanned')).toBe(true);
+    expect(summary.notScanned).toBeGreaterThan(0);
+    expect(summary.missing).toBe(0);
     expect(summary.recipes).toBeGreaterThanOrEqual(5);
     expect(fallbackInventoryTool('gemini', 'agent-runtime')).toMatchObject({
       label: 'Gemini CLI',
       recipeId: 'gemini-cli',
       available: false,
+      status: 'not_scanned',
+      error: 'not scanned',
     });
   });
 });

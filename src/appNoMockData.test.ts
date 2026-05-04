@@ -5,4 +5,9 @@ describe('production operational UI data sources', () => {
   it('does not import mock operational data into App.tsx', () => {
     expect(appSource).not.toContain('./data/mockData');
   });
+
+  it('does not render known runtime rows in browser Agent Runtimes mode', () => {
+    expect(appSource).toContain('Browser preview cannot inspect installed CLIs');
+    expect(appSource).not.toContain('AgentRuntimeBrowserPreview');
+  });
 });

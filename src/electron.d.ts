@@ -21,7 +21,7 @@ export type InventoryToolStatus = {
   category: 'agent-runtime' | 'developer-prerequisite' | 'deployment-tool' | string;
   recipeId?: string;
   available: boolean;
-  status: 'ready' | 'missing';
+  status: 'ready' | 'missing' | 'not_scanned';
   version: string | null;
   error?: string;
 };

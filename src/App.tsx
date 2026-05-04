@@ -29,6 +29,7 @@ import {
   type LocalToolCategory,
   type LocalToolItem,
 } from './localTools';
+import { runtimeAvailable } from './agentRuntimeAvailability';
 import type {
   AgentRunEvent,
   AgentRunSnapshot,
@@ -401,7 +402,6 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
             <span className="hint">Run `npm run desktop:dev` for local inventory.</span>
           </div>
         </div>
-        <AgentRuntimeBrowserPreview categories={categories} />
       </div>
     );
   }
@@ -432,7 +432,7 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
         <RuntimeMetric label="Ready" value={summary.installed} />
         <RuntimeMetric label="Needs config" value={summary.needsConfig} />
         <RuntimeMetric label="Missing or stopped" value={summary.missing} />
-        <RuntimeMetric label="Trusted recipes" value={summary.recipes} />
+        <RuntimeMetric label="Not scanned" value={summary.notScanned} />
       </div>
 
       <div className="local-tools-sections">
@@ -581,33 +581,6 @@ function HealthPreview({ checks }: { checks: LocalToolItem['healthChecks'] }) {
   );
 }
 
-function AgentRuntimeBrowserPreview({ categories }: { categories: LocalToolCategory[] }) {
-  return (
-    <div className="local-tools-sections">
-      {categories.slice(0, 3).map((category) => (
-        <div className="card local-tool-section" key={category.id}>
-          <div className="section-head compact">
-            <h2>{category.title}</h2>
-            <span className="hint">Desktop bridge required for live status</span>
-          </div>
-          <div className="local-tool-list">
-            {category.items.slice(0, 4).map((item) => (
-              <div className="local-tool-row browser-preview-row" key={item.id}>
-                <span className="status-dot missing" />
-                <div className="local-tool-main">
-                  <strong>{item.label}</strong>
-                  <span>Unavailable in browser preview</span>
-                </div>
-                <span className="chip chip-muted">Requires desktop bridge</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function readinessLabel(readiness: LocalToolItem['readiness']) {
   const labels: Record<LocalToolItem['readiness'], string> = {
     installed: 'Installed',
@@ -615,6 +588,7 @@ function readinessLabel(readiness: LocalToolItem['readiness']) {
     needs_config: 'Needs config',
     running: 'Running',
     stopped: 'Stopped',
+    not_scanned: 'Not scanned',
   };
   return labels[readiness];
 }
@@ -622,6 +596,7 @@ function readinessLabel(readiness: LocalToolItem['readiness']) {
 function statusDotClass(readiness: LocalToolItem['readiness']) {
   if (readiness === 'installed' || readiness === 'running') return 'ok';
   if (readiness === 'needs_config') return 'warn';
+  if (readiness === 'not_scanned') return '';
   return 'missing';
 }
 
@@ -1055,12 +1030,6 @@ type ConsoleEntry = {
   at: string;
 };
 
-const RUNTIME_INVENTORY_KEY: Record<AgentRuntimeId, string> = {
-  'claude-code': 'claude',
-  'codex-cli': 'codex',
-  'gemini-cli': 'gemini',
-};
-
 function AgentConsoleView() {
   const desktopAvailable = Boolean(window.conductor?.agents);
   const [runtimes, setRuntimes] = useState<AgentRuntimeDescriptor[]>([]);
@@ -1251,6 +1220,7 @@ function AgentConsoleView() {
             {runtimes.map((runtime) => {
               const available = runtimeAvailable(runtime, inventory);
               const selected = runtime.id === runtimeId;
+              const awaitingInventory = !inventory && !runtime.needsValidation;
               return (
                 <button
                   type="button"
@@ -1260,13 +1230,13 @@ function AgentConsoleView() {
                   onClick={() => setRuntimeId(runtime.id)}
                   title={runtime.notes.join(' ')}
                 >
-                  <span className={`status-dot ${available ? 'ok' : 'missing'}`} />
+                  <span className={`status-dot ${available ? 'ok' : awaitingInventory ? '' : 'missing'}`} />
                   <span className="agent-runtime-main">
                     <strong>{runtime.label}</strong>
                     <span>{runtime.description}</span>
                   </span>
                   <span className={`chip ${available ? 'chip-ok' : 'chip-muted'}`}>
-                    {runtime.needsValidation ? 'Needs validation' : available ? 'Available' : 'Missing'}
+                    {runtime.needsValidation ? 'Needs validation' : available ? 'Available' : awaitingInventory ? 'Awaiting inventory' : 'Missing'}
                   </span>
                 </button>
               );
@@ -1359,12 +1329,4 @@ function AgentConsoleView() {
       </div>
     </div>
   );
-}
-
-function runtimeAvailable(runtime: AgentRuntimeDescriptor, inventory: LocalInventory | null): boolean {
-  if (runtime.needsValidation) return false;
-  if (!inventory) return true;
-  const inventoryKey = RUNTIME_INVENTORY_KEY[runtime.id];
-  const tool = inventoryKey ? inventory.tools[inventoryKey] : undefined;
-  return Boolean(tool?.available);
 }
