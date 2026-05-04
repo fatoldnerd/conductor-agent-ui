@@ -2,11 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   IconActivity,
   IconAgents,
-  IconAlert,
   IconBell,
-  IconCheck,
   IconCommand,
-  IconCross,
   IconDashboard,
   IconInfo,
   IconLogo,
@@ -19,13 +16,6 @@ import {
   IconTools,
   IconWorkflow,
 } from './components/Icons';
-import {
-  activity,
-  agents,
-  teams,
-  tools,
-  workflow,
-} from './data/mockData';
 import {
   listIntegrationRecipes,
   planIntegrationInstall,
@@ -47,13 +37,6 @@ import type {
   IntegrationInstallRun,
   LocalInventory,
 } from './electron';
-import type {
-  ActivityEvent,
-  Agent,
-  AgentStatus,
-  Team,
-  Workflow,
-} from './types';
 
 type View = 'dashboard' | 'agents' | 'teams' | 'workflows' | 'tools' | 'console' | 'integrations' | 'activity' | 'diagnostics';
 
@@ -64,8 +47,8 @@ const NAV: {
   badge?: string;
 }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
-  { id: 'agents', label: 'Agents', icon: IconAgents, badge: String(agents.length) },
-  { id: 'teams', label: 'Teams', icon: IconTeams, badge: String(teams.length) },
+  { id: 'agents', label: 'Agents', icon: IconAgents },
+  { id: 'teams', label: 'Teams', icon: IconTeams },
   { id: 'workflows', label: 'Workflows', icon: IconWorkflow },
   { id: 'tools', label: 'Agent Runtimes', icon: IconTools },
   { id: 'console', label: 'Agent Console', icon: IconPlay },
@@ -304,176 +287,38 @@ function DashboardInventoryList({ title, items, empty }: { title: string; items:
   );
 }
 
-/* -------------------------------------------------------------- Agent cards */
-
-/** Restrained agent avatar — desaturated solid based on a deterministic hue. */
-function avatarStyle(id: string) {
-  const seed = id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const hue = (seed * 47) % 360;
-  return {
-    background: `hsl(${hue}, 14%, 18%)`,
-    boxShadow: `inset 0 0 0 1px hsl(${hue}, 22%, 30%)`,
-    color: `hsl(${hue}, 25%, 82%)`,
-  };
-}
-
-function statusDot(status: AgentStatus) {
-  switch (status) {
-    case 'active':
-      return <span className="dot green" title="Active" />;
-    case 'idle':
-      return <span className="dot" title="Idle" />;
-    case 'paused':
-      return <span className="dot amber" title="Paused" />;
-    case 'error':
-      return <span className="dot red" title="Error" />;
-  }
-}
-
-function statusChipForAgent(status: AgentStatus) {
-  switch (status) {
-    case 'active':
-      return (
-        <span className="chip green">
-          <span className="dot green" /> Active
-        </span>
-      );
-    case 'idle':
-      return (
-        <span className="chip">
-          <span className="dot" /> Idle
-        </span>
-      );
-    case 'paused':
-      return (
-        <span className="chip amber">
-          <span className="dot amber" /> Paused
-        </span>
-      );
-    case 'error':
-      return (
-        <span className="chip red">
-          <span className="dot red" /> Error
-        </span>
-      );
-  }
-}
-
-function AgentCard({ agent }: { agent: Agent }) {
-  const tool = tools.find((t) => t.id === agent.tool);
-  const successPct = Math.round(agent.successRate * 100);
-  const progressClass =
-    agent.status === 'error'
-      ? 'progress red'
-      : successPct >= 95
-        ? 'progress green'
-        : successPct >= 85
-          ? 'progress'
-          : 'progress';
+function OperationalEmptyState({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) {
+  const desktopAvailable = Boolean(window.conductor);
   return (
-    <div className="card agent-card">
-      <div className="head">
-        <span className="agent-avatar" style={avatarStyle(agent.id)}>
-          {agent.name.slice(0, 2).toUpperCase()}
-        </span>
-        <div className="name-line">
-          <strong>{agent.name}</strong>
-          <span className="role">{agent.role}</span>
-        </div>
-        <span className="status">{statusChipForAgent(agent.status)}</span>
-      </div>
-
-      <div className="meta-row">
-        <div>
-          <div className="k">Tool</div>
-          <div className="v">{tool?.name ?? agent.tool}</div>
-        </div>
-        <div>
-          <div className="k">Model</div>
-          <div className="v">{agent.model}</div>
-        </div>
-        <div>
-          <div className="k">Tasks</div>
-          <div className="v num">{agent.tasksCompleted}</div>
-        </div>
-        <div>
-          <div className="k">Cost today</div>
-          <div className="v num">${agent.costToday.toFixed(2)}</div>
-        </div>
-      </div>
-
-      <div>
-        <div className="progress-row">
-          <span>Success</span>
-          <span className="v num">{successPct}%</span>
-        </div>
-        <div className={progressClass}>
-          <span style={{ width: `${successPct}%` }} />
-        </div>
-      </div>
-
-      <div className="tags">
-        {agent.tags.map((tag) => (
-          <span key={tag} className="chip">
-            {tag}
+    <div className="local-tools-page">
+      <div className="card local-tools-hero">
+        <span className="eyebrow">{eyebrow}</span>
+        <h2>{title}</h2>
+        <p>{body}</p>
+        <div className="actions">
+          <button className="btn-ghost primary" disabled>
+            {desktopAvailable ? 'Awaiting local data source' : 'Requires desktop bridge'}
+          </button>
+          <span className="hint">
+            {desktopAvailable
+              ? 'Desktop mode is active; no real data source is connected for this view.'
+              : 'Browser mode cannot inspect local operational state.'}
           </span>
-        ))}
-      </div>
-
-      <div className="foot">
-        {statusDot(agent.status)}
-        <span>{agent.lastActivity}</span>
-        <span className="num-tokens">{(agent.tokens / 1000).toFixed(0)}k tokens</span>
+        </div>
       </div>
     </div>
   );
 }
 
-/* -------------------------------------------------------------- Agents view */
-
-const AGENT_FILTERS: { id: AgentStatus | 'all'; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'active', label: 'Active' },
-  { id: 'idle', label: 'Idle' },
-  { id: 'paused', label: 'Paused' },
-  { id: 'error', label: 'Error' },
-];
+/* -------------------------------------------------------------- Operational empty states */
 
 function AgentsView() {
-  const [filter, setFilter] = useState<AgentStatus | 'all'>('all');
-  const filtered = useMemo(
-    () => (filter === 'all' ? agents : agents.filter((a) => a.status === filter)),
-    [filter],
-  );
   return (
-    <>
-      <div className="toolbar">
-        {AGENT_FILTERS.map((f) => {
-          const count = f.id === 'all' ? agents.length : agents.filter((a) => a.status === f.id).length;
-          return (
-            <button
-              key={f.id}
-              className={`filter-pill ${filter === f.id ? 'active' : ''}`}
-              onClick={() => setFilter(f.id)}
-            >
-              {f.label} · {count}
-            </button>
-          );
-        })}
-        <span style={{ marginLeft: 'auto' }}>
-          <button className="btn-ghost primary">
-            <IconPlus width={12} height={12} /> Spawn agent
-          </button>
-        </span>
-      </div>
-
-      <div className="agents-grid">
-        {filtered.map((a) => (
-          <AgentCard key={a.id} agent={a} />
-        ))}
-        {filtered.length === 0 && <div className="empty">No agents match this filter.</div>}
-      </div>
-    </>
+    <OperationalEmptyState
+      eyebrow="Agents"
+      title="No real agent run history is connected yet"
+      body="This desktop screen will show agents only after Conductor has a local run store or a trusted runtime API to read from. It does not display sample agents or inferred running state."
+    />
   );
 }
 
@@ -481,80 +326,11 @@ function AgentsView() {
 
 function TeamsView() {
   return (
-    <div className="teams-grid">
-      {teams.map((team) => (
-        <TeamCard key={team.id} team={team} />
-      ))}
-      <button className="team-builder-add">
-        <IconPlus />
-        <span className="label">Compose new team</span>
-        <span className="sub">Drag agents into a workflow</span>
-      </button>
-    </div>
-  );
-}
-
-function TeamCard({ team }: { team: Team }) {
-  const members = team.agentIds
-    .map((id) => agents.find((a) => a.id === id))
-    .filter(Boolean) as Agent[];
-  const visible = members.slice(0, 4);
-  const extra = members.length - visible.length;
-  const steps = team.workflow.split('→').map((s) => s.trim());
-  const chip =
-    team.status === 'running' ? (
-      <span className="chip green">
-        <span className="dot green" /> Running
-      </span>
-    ) : team.status === 'paused' ? (
-      <span className="chip amber">
-        <span className="dot amber" /> Paused
-      </span>
-    ) : (
-      <span className="chip indigo">
-        <span className="dot indigo" /> Planning
-      </span>
-    );
-
-  return (
-    <div className="card team-card" style={{ ['--team-color' as string]: team.color }}>
-      <div className="team-head">
-        <h3>{team.name}</h3>
-        <span style={{ marginLeft: 'auto' }}>{chip}</span>
-      </div>
-      <p className="desc">{team.description}</p>
-
-      <div className="members">
-        {visible.map((m) => (
-          <span key={m.id} className="agent-avatar" style={avatarStyle(m.id)}>
-            {m.name.slice(0, 2).toUpperCase()}
-          </span>
-        ))}
-        {extra > 0 && <span className="extra">+{extra}</span>}
-      </div>
-
-      <div className="workflow-flow">
-        {steps.map((s, i) => (
-          <span key={i} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-            <span className="step">{s}</span>
-            {i < steps.length - 1 && <span className="arrow">→</span>}
-          </span>
-        ))}
-      </div>
-
-      <div className="foot-row">
-        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-          {members.length} agent{members.length === 1 ? '' : 's'}
-        </span>
-        <span className="actions">
-          <button className="btn-ghost">
-            {team.status === 'running' ? <IconPause width={11} height={11} /> : <IconPlay width={11} height={11} />}
-            {team.status === 'running' ? 'Pause' : 'Run'}
-          </button>
-          <button className="btn-ghost primary">Open</button>
-        </span>
-      </div>
-    </div>
+    <OperationalEmptyState
+      eyebrow="Teams"
+      title="No real team orchestration source is connected yet"
+      body="Teams will appear here only after they are loaded from a local Conductor data source. This screen does not synthesize squads, members, or running status."
+    />
   );
 }
 
@@ -562,129 +338,11 @@ function TeamCard({ team }: { team: Team }) {
 
 function WorkflowsView() {
   return (
-    <div className="canvas-wrap workflow-view">
-      <div className="canvas-bg" />
-      <div className="canvas-head">
-        <h3>{workflow.name}</h3>
-        <span className="chip green">
-          <span className="dot green" /> Live
-        </span>
-        <span className="canvas-meta num">
-          {workflow.nodes.length} nodes · {workflow.edges.length} edges
-        </span>
-        <span className="right">
-          <button className="btn-ghost">
-            <IconPause width={11} height={11} /> Pause
-          </button>
-          <button className="btn-ghost primary">
-            <IconPlay width={11} height={11} /> Run again
-          </button>
-        </span>
-      </div>
-      <div className="canvas-scroll">
-        <WorkflowCanvas wf={workflow} />
-      </div>
-    </div>
-  );
-}
-
-function WorkflowCanvas({ wf }: { wf: Workflow }) {
-  const NODE_W = 168;
-  const NODE_H = 60;
-  const PAD = 36;
-  const width = Math.max(...wf.nodes.map((n) => n.x)) + NODE_W + PAD * 2;
-  const height = Math.max(...wf.nodes.map((n) => n.y)) + NODE_H + PAD * 2;
-
-  const nodeById = (id: string) => wf.nodes.find((n) => n.id === id)!;
-
-  const edgePath = (from: { x: number; y: number }, to: { x: number; y: number }) => {
-    const sx = from.x + NODE_W + PAD;
-    const sy = from.y + NODE_H / 2 + PAD;
-    const ex = to.x + PAD;
-    const ey = to.y + NODE_H / 2 + PAD;
-    const mx = (sx + ex) / 2;
-    return `M${sx} ${sy} C${mx} ${sy}, ${mx} ${ey}, ${ex} ${ey}`;
-  };
-
-  const subFor = (kind: string) => {
-    switch (kind) {
-      case 'trigger':
-        return 'TRIGGER';
-      case 'agent':
-        return 'AGENT';
-      case 'gate':
-        return 'GATE';
-      case 'output':
-        return 'OUTPUT';
-      default:
-        return '';
-    }
-  };
-
-  return (
-    <svg className="canvas-svg" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <defs>
-        <marker
-          id="arrow"
-          viewBox="0 0 10 10"
-          refX="8"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto-start-reverse"
-        >
-          <path d="M0,0 L10,5 L0,10 z" fill="rgba(255, 255, 255, 0.45)" />
-        </marker>
-      </defs>
-
-      {wf.edges.map((e, i) => {
-        const f = nodeById(e.from);
-        const t = nodeById(e.to);
-        const d = edgePath(f, t);
-        const lx = (f.x + NODE_W + PAD + t.x + PAD) / 2;
-        const ly = (f.y + NODE_H / 2 + PAD + t.y + NODE_H / 2 + PAD) / 2 - 6;
-        return (
-          <g key={i}>
-            <path d={d} className="canvas-edge" markerEnd="url(#arrow)" />
-            {e.label && (
-              <g>
-                <rect
-                  x={lx - 22}
-                  y={ly - 9}
-                  width={44}
-                  height={16}
-                  rx={4}
-                  fill="var(--surface-2)"
-                  stroke="var(--border-strong)"
-                />
-                <text x={lx} y={ly + 2} textAnchor="middle" className="canvas-edge-label">
-                  {e.label}
-                </text>
-              </g>
-            )}
-          </g>
-        );
-      })}
-
-      {wf.nodes.map((n) => {
-        const x = n.x + PAD;
-        const y = n.y + PAD;
-        const agent = n.agentId ? agents.find((a) => a.id === n.agentId) : undefined;
-        const isLive = agent?.status === 'active';
-        return (
-          <g key={n.id} className={`canvas-node-${n.kind}`}>
-            <rect className="canvas-node" x={x} y={y} width={NODE_W} height={NODE_H} rx={8} />
-            <text x={x + 14} y={y + 22} className="canvas-node-sub">
-              {subFor(n.kind)}
-            </text>
-            <text x={x + 14} y={y + 42} className="canvas-node-label">
-              {n.label}
-            </text>
-            {isLive && <circle cx={x + NODE_W - 12} cy={y + 12} r={3.5} className="canvas-node-pulse" />}
-          </g>
-        );
-      })}
-    </svg>
+    <OperationalEmptyState
+      eyebrow="Workflows"
+      title="No real workflow graph is connected yet"
+      body="A workflow canvas will render only when Conductor can load actual local workflow definitions and run state. No live graph or node status is fabricated."
+    />
   );
 }
 
@@ -1380,31 +1038,11 @@ function DiagnosticsView() {
 
 function ActivityView() {
   return (
-    <div className="card activity activity-view-card">
-      <ActivityList items={activity} />
-    </div>
-  );
-}
-
-function ActivityList({ items }: { items: ActivityEvent[] }) {
-  return (
-    <ul className="activity-list">
-      {items.map((e) => (
-        <li key={e.id} className="activity-item">
-          <span className={`ico ${e.level}`}>
-            {e.level === 'success' && <IconCheck />}
-            {e.level === 'info' && <IconInfo />}
-            {e.level === 'warn' && <IconAlert />}
-            {e.level === 'error' && <IconCross />}
-          </span>
-          <div>
-            <span className="who">{e.agentName ?? 'System'}</span>
-            <span className="when">{e.timestamp}</span>
-            <p>{e.message}</p>
-          </div>
-        </li>
-      ))}
-    </ul>
+    <OperationalEmptyState
+      eyebrow="Activity"
+      title="No real activity stream is connected yet"
+      body="Activity will appear only after Conductor has a trusted local event source or persisted run log. This screen does not show synthetic live events."
+    />
   );
 }
 
