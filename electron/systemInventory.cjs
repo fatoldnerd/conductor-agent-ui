@@ -63,12 +63,17 @@ const COMMON_COMMAND_DIRS = [
 function userManagedBinDirs(home) {
   return [
     path.join(home, '.npm-global', 'bin'),
+    path.join(home, '.npm', 'bin'),
     path.join(home, '.local', 'bin'),
     path.join(home, '.volta', 'bin'),
     path.join(home, '.asdf', 'shims'),
     path.join(home, '.bun', 'bin'),
     path.join(home, '.cargo', 'bin'),
     path.join(home, '.deno', 'bin'),
+    path.join(home, '.pnpm-global', 'bin'),
+    path.join(home, 'Library', 'pnpm'),
+    path.join(home, '.yarn', 'bin'),
+    path.join(home, '.config', 'yarn', 'global', 'node_modules', '.bin'),
     path.join(home, 'bin'),
   ];
 }

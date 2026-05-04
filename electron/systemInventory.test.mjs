@@ -183,6 +183,55 @@ describe('collectLocalInventory', () => {
     expect(inventory.tools.node).toMatchObject({ available: true, version: 'v22.1.0' });
   });
 
+  it('detects Codex CLI from pnpm global bin when Electron PATH and zsh fallback miss it', async () => {
+    const home = '/Users/brad';
+    const codexPath = `${home}/Library/pnpm/codex`;
+
+    const commands = {
+      'git --version': ok('git version 2.45.0\n'),
+      '/opt/homebrew/bin/node --version': ok('v22.1.0\n'),
+      '/opt/homebrew/bin/npm --version': ok('10.9.4\n'),
+      '/opt/homebrew/bin/python3 --version': ok('Python 3.12.2\n'),
+      '/opt/homebrew/bin/curl --version': ok('curl 8.7.1\n'),
+      '/opt/homebrew/bin/claude --version': ok('2.1.126 (Claude Code)\n'),
+      '/opt/homebrew/bin/gemini --version': ok('0.1.12\n'),
+      [`${codexPath} --version`]: ok('codex-cli 0.128.0\n'),
+      'ss -ltnp': missing,
+      'lsof -nP -iTCP -sTCP:LISTEN': ok(''),
+      'ps -eo pid,comm,args': ok(''),
+    };
+
+    const inventory = await collectLocalInventory({
+      homedir: () => home,
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'macbook',
+      release: () => '24.6.0',
+      env: { PATH: '/usr/bin:/bin' },
+      async execFile(command, args = []) {
+        if (command === '/bin/zsh' && args[0] === '-lc') return ok('');
+        const key = [command, ...args].join(' ');
+        const result = commands[key];
+        if (result instanceof Error) throw result;
+        if (result) return result;
+        throw missing;
+      },
+      async access() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return '';
+      },
+      async readdir() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+    });
+
+    expect(inventory.tools.codex).toMatchObject({ available: true, version: 'codex-cli 0.128.0' });
+    expect(inventory.tools.claude).toMatchObject({ available: true, version: '2.1.126 (Claude Code)' });
+    expect(inventory.tools.gemini).toMatchObject({ available: true, version: '0.1.12' });
+  });
+
   it('falls back to a login zsh to resolve Claude Code when no static dir contains it', async () => {
     const home = '/Users/brad';
     const resolvedClaude = `${home}/Library/pnpm/claude`;
