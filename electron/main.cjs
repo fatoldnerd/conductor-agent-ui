@@ -36,7 +36,7 @@ function packagedIndexPath() {
 function isTrustedRendererUrl(url) {
   const parsed = safeUrl(url);
   if (!parsed) return false;
-  if (isDev) return parsed.origin === safeUrl(process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5173')?.origin;
+  if (isDev) return parsed.origin === safeUrl(process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5273')?.origin;
   return parsed.protocol === 'file:' && path.normalize(parsed.pathname) === path.normalize(packagedIndexPath());
 }
 
@@ -100,7 +100,7 @@ function createWindow() {
   });
 
   if (isDev) {
-    win.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5173');
+    win.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5273');
   } else {
     win.loadFile(path.join(__dirname, '../dist/index.html'));
   }

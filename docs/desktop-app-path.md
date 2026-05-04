@@ -67,7 +67,7 @@ Then configure Tauri to use the Vite build:
   "build": {
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173"
+    "devUrl": "http://127.0.0.1:5273"
   }
 }
 ```
