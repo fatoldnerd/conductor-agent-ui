@@ -1312,6 +1312,30 @@ a {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+.runtime-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.runtime-metric {
+  padding: 14px 16px;
+}
+.runtime-metric span {
+  display: block;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+  margin-bottom: 6px;
+}
+.runtime-metric strong {
+  display: block;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1;
 }
 .local-tools-sections {
   display: grid;
@@ -1329,7 +1353,7 @@ a {
 }
 .local-tool-row {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  grid-template-columns: 10px minmax(220px, 1fr) auto minmax(240px, auto);
   align-items: center;
   gap: 10px;
   padding: 11px 12px;
@@ -1339,6 +1363,17 @@ a {
 }
 .local-tool-main {
   min-width: 0;
+}
+.local-tool-main em {
+  display: block;
+  max-width: 620px;
+  margin-top: 3px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .local-tool-main strong,
 .install-preview-head strong,
@@ -1359,12 +1394,34 @@ a {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tool-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tool-row-actions .btn-ghost {
+  min-height: 30px;
+  white-space: nowrap;
+}
 .install-preview-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   margin-bottom: 12px;
+}
+.install-preview-head .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.runtime-action-panel {
+  border-color: var(--border-strong);
+}
+.runtime-callout {
+  margin: 12px 0 0;
 }
 .install-step {
   display: grid;
@@ -1570,6 +1627,10 @@ a {
   background: var(--green);
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
 }
+.status-dot.warn {
+  background: var(--amber);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.10);
+}
 .status-dot.missing {
   background: var(--text-faint);
 }
@@ -1606,6 +1667,11 @@ a {
   color: var(--text-dim);
   background: rgba(255, 255, 255, 0.035);
 }
+.chip-warn {
+  color: #f8d78c;
+  background: var(--amber-soft);
+  border-color: rgba(245, 158, 11, 0.18);
+}
 .empty-state {
   color: var(--text-dim);
   font-size: 12.5px;
@@ -1616,16 +1682,22 @@ a {
   .diagnostics-grid {
     grid-template-columns: 1fr;
   }
+  .runtime-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .local-tools-sections {
     grid-template-columns: 1fr;
   }
   .local-tool-row {
     grid-template-columns: 10px minmax(0, 1fr) auto;
   }
-  .local-tool-row .btn-ghost,
-  .local-tool-row > .hint {
+  .tool-row-actions {
     grid-column: 2 / -1;
     justify-self: start;
+    justify-content: flex-start;
+  }
+  .local-tool-main em {
+    white-space: normal;
   }
 }
 

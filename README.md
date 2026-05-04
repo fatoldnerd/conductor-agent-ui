@@ -1,18 +1,22 @@
 # Conductor
 
-Conductor is a visual command center concept for managing AI agents, agent teams, and orchestration workflows across tools such as Hermes, OpenClaw, Claude Code, Codex, and future agent runtimes.
+Conductor is a desktop-first command center for managing AI agent runtimes, agent teams, and orchestration workflows across tools such as Hermes, OpenClaw, Claude Code, Codex, and future agent runtimes.
 
-This first version is a static React prototype. It has no backend and uses mock data, which makes it safe to deploy publicly as a UI proof of concept.
+The hosted web build remains a safe preview surface. Local inventory, runtime detection, and installer execution require the Electron desktop bridge.
 
 ## What it shows
 
-- Mission control dashboard for active agents and runs
+- Agent Runtimes page for local CLIs, prerequisites, deployment tools, and running services
 - Agent cards for Hermes, OpenClaw, Claude Code, Codex, and specialist tools
 - Team builder view for grouping agents into coordinated squads
 - Workflow canvas showing orchestration pipelines
-- Tool connection status for local CLIs and cloud providers
+- Safe install/configure/health affordances backed by trusted recipe previews
 - Activity feed for agent events, handoffs, approvals, and deployments
-- Responsive dark interface suitable for web or desktop packaging later
+- Responsive dark interface suitable for web preview and desktop packaging
+
+## Runtime safety
+
+The renderer never accepts arbitrary shell commands. Agent Runtime actions show previews, docs, configuration steps, or desktop-bridge requirements. Command execution is limited to explicit Electron main-process installer recipes with native approval.
 
 ## Tech stack
 

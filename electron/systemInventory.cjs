@@ -32,6 +32,7 @@ function defaultDeps() {
     arch: process.arch,
     hostname: os.hostname,
     release: os.release,
+    env: process.env,
     execFile: (command, args = [], options = {}) => execFileAsync(command, args, {
       timeout: 5000,
       windowsHide: true,
@@ -47,21 +48,96 @@ function firstLine(value) {
   return String(value || '').trim().split('\n').find(Boolean) || null;
 }
 
-async function runCommand(deps, command, args = []) {
+const COMMON_COMMAND_DIRS = [
+  '/opt/homebrew/bin',
+  '/opt/homebrew/sbin',
+  '/usr/local/bin',
+  '/usr/local/sbin',
+  '/usr/bin',
+  '/bin',
+  '/usr/sbin',
+  '/sbin',
+];
+
+function commandSearchDirs(deps) {
+  const envPath = String(deps.env?.PATH || process.env.PATH || '')
+    .split(path.delimiter)
+    .filter(Boolean);
+  return [...new Set([...envPath, ...COMMON_COMMAND_DIRS])];
+}
+
+function isNotFound(error) {
+  return error?.code === 'ENOENT' || /not found|ENOENT/i.test(String(error?.message || error || ''));
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function safeCommandName(command) {
+  return /^[A-Za-z0-9._-]+$/.test(command);
+}
+
+async function execTool(deps, command, args = [], extraOptions = {}) {
+  const { stdout, stderr } = await deps.execFile(command, args, {
+    timeout: 5000,
+    windowsHide: true,
+    maxBuffer: 1024 * 1024,
+    ...extraOptions,
+  });
+  return { ok: true, stdout: String(stdout || ''), stderr: String(stderr || '') };
+}
+
+async function runViaLoginShell(deps, command, args = []) {
+  if (deps.platform !== 'darwin' || !safeCommandName(command)) return null;
+  const shell = '/bin/zsh';
+  const argText = args.map(shellQuote).join(' ');
+  const pathPrefix = commandSearchDirs(deps).join(path.delimiter);
+  const script = `PATH=${shellQuote(pathPrefix)}:$PATH; resolved=$(command -v ${command}) || exit 127; "$resolved" ${argText}`;
   try {
-    const { stdout, stderr } = await deps.execFile(command, args, {
-      timeout: 5000,
-      windowsHide: true,
-      maxBuffer: 1024 * 1024,
+    return await execTool(deps, shell, ['-lc', script], {
+      env: { ...(deps.env || process.env), PATH: `${pathPrefix}${path.delimiter}${deps.env?.PATH || process.env.PATH || ''}` },
     });
-    return { ok: true, stdout: String(stdout || ''), stderr: String(stderr || '') };
   } catch (error) {
     return {
       ok: false,
       stdout: String(error.stdout || ''),
       stderr: String(error.stderr || ''),
-      error: error.code === 'ENOENT' ? 'not found' : String(error.message || error),
+      error: isNotFound(error) || error.code === 127 ? 'not found' : String(error.message || error),
     };
+  }
+}
+
+async function runCommand(deps, command, args = []) {
+  try {
+    return await execTool(deps, command, args);
+  } catch (error) {
+    const directError = {
+      ok: false,
+      stdout: String(error.stdout || ''),
+      stderr: String(error.stderr || ''),
+      error: isNotFound(error) ? 'not found' : String(error.message || error),
+    };
+
+    if (!isNotFound(error)) return directError;
+
+    for (const dir of commandSearchDirs(deps)) {
+      const candidate = path.join(dir, command);
+      try {
+        return await execTool(deps, candidate, args);
+      } catch (candidateError) {
+        if (!isNotFound(candidateError)) {
+          return {
+            ok: false,
+            stdout: String(candidateError.stdout || ''),
+            stderr: String(candidateError.stderr || ''),
+            error: String(candidateError.message || candidateError),
+          };
+        }
+      }
+    }
+
+    return (await runViaLoginShell(deps, command, args)) ?? directError;
   }
 }
 

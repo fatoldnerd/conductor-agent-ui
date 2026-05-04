@@ -35,6 +35,7 @@ function createFakeDeps() {
       const key = [command, ...args].join(' ');
       const result = commands[key];
       if (result instanceof Error) throw result;
+      if (!result && command.startsWith('/')) throw missing;
       if (!result) throw new Error(`unexpected command ${key}`);
       return result;
     },
@@ -111,6 +112,7 @@ describe('collectLocalInventory', () => {
         const key = [command, ...args].join(' ');
         const result = commands[key];
         if (result instanceof Error) throw result;
+        if (!result && command.startsWith('/')) throw missing;
         if (!result) throw new Error(`unexpected command ${key}`);
         return result;
       },
@@ -127,5 +129,47 @@ describe('collectLocalInventory', () => {
     expect(inventory.services.openclaw).toMatchObject({ running: true });
     expect(inventory.agents).toEqual({});
     expect(inventory.desktopSmoke).toMatchObject({ bridgeExpected: true, platformSupported: true, status: 'ready' });
+  });
+
+  it('detects macOS CLIs from Homebrew-style fallback paths when Electron PATH is sparse', async () => {
+    const commands = {
+      'git --version': ok('git version 2.45.0\n'),
+      '/opt/homebrew/bin/node --version': ok('v22.2.0\n'),
+      '/opt/homebrew/bin/npm --version': ok('10.9.4\n'),
+      '/opt/homebrew/bin/claude --version': ok('2.1.126 (Claude Code)\n'),
+      '/opt/homebrew/bin/codex --version': ok('codex-cli 0.128.0\n'),
+      '/opt/homebrew/bin/gemini --version': ok('0.1.12\n'),
+      'ss -ltnp': missing,
+      'lsof -nP -iTCP -sTCP:LISTEN': ok(''),
+      'ps -eo pid,comm,args': ok(''),
+    };
+
+    const inventory = await collectLocalInventory({
+      homedir: () => '/Users/brad',
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'macbook',
+      release: () => '24.6.0',
+      env: { PATH: '/usr/bin:/bin' },
+      async execFile(command, args = []) {
+        const key = [command, ...args].join(' ');
+        const result = commands[key];
+        if (result instanceof Error) throw result;
+        if (result) return result;
+        throw missing;
+      },
+      async access() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return '';
+      },
+    });
+
+    expect(inventory.tools.claude).toMatchObject({ available: true, version: '2.1.126 (Claude Code)' });
+    expect(inventory.tools.codex).toMatchObject({ available: true, version: 'codex-cli 0.128.0' });
+    expect(inventory.tools.gemini).toMatchObject({ available: true, version: '0.1.12' });
+    expect(inventory.tools.node).toMatchObject({ available: true, version: 'v22.2.0' });
+    expect(inventory.tools.npm).toMatchObject({ available: true, version: '10.9.4' });
   });
 });

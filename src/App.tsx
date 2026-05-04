@@ -3,8 +3,6 @@ import {
   IconActivity,
   IconAgents,
   IconAlert,
-  IconArrowDown,
-  IconArrowUp,
   IconBell,
   IconCheck,
   IconCommand,
@@ -24,29 +22,29 @@ import {
 import {
   activity,
   agents,
-  stats,
   teams,
-  toolMeta,
   tools,
   workflow,
 } from './data/mockData';
 import {
-  getIntegrationRecipe,
   listIntegrationRecipes,
   planIntegrationInstall,
   type IntegrationInstallPlan,
   type IntegrationRecipe,
 } from './integrations/recipes';
-import type { IntegrationInstallRun, InventoryToolStatus, LocalInventory } from './electron';
+import {
+  buildLocalToolCategories,
+  localToolSummary,
+  type LocalToolAction,
+  type LocalToolCategory,
+  type LocalToolItem,
+} from './localTools';
+import type { IntegrationInstallRun, LocalInventory } from './electron';
 import type {
   ActivityEvent,
   Agent,
   AgentStatus,
-  Stat,
   Team,
-  Tool,
-  ToolId,
-  ToolStatus,
   Workflow,
 } from './types';
 
@@ -62,7 +60,7 @@ const NAV: {
   { id: 'agents', label: 'Agents', icon: IconAgents, badge: String(agents.length) },
   { id: 'teams', label: 'Teams', icon: IconTeams, badge: String(teams.length) },
   { id: 'workflows', label: 'Workflows', icon: IconWorkflow },
-  { id: 'tools', label: 'Local Tools', icon: IconTools },
+  { id: 'tools', label: 'Agent Runtimes', icon: IconTools },
   { id: 'integrations', label: 'Installers', icon: IconCommand, badge: String(listIntegrationRecipes().length) },
   { id: 'activity', label: 'Activity', icon: IconActivity },
   { id: 'diagnostics', label: 'Diagnostics', icon: IconInfo },
@@ -73,14 +71,14 @@ const TITLES: Record<View, { title: string; crumb: string }> = {
   agents: { title: 'Agents', crumb: 'All running and idle agents' },
   teams: { title: 'Teams', crumb: 'Coordinated agent squads' },
   workflows: { title: 'Workflows', crumb: 'Pipelines and graphs' },
-  tools: { title: 'Local Tools', crumb: 'Agent runtimes and prerequisites' },
+  tools: { title: 'Agent Runtimes', crumb: 'Local runtimes, tools, and services' },
   integrations: { title: 'Installers', crumb: 'Guided agent runtime setup' },
   activity: { title: 'Activity', crumb: 'Real-time event stream' },
   diagnostics: { title: 'Diagnostics', crumb: 'Desktop readiness checks' },
 };
 
 export default function App() {
-  const [view, setView] = useState<View>('dashboard');
+  const [view, setView] = useState<View>('tools');
 
   return (
     <div className="app">
@@ -88,7 +86,7 @@ export default function App() {
       <div className="main">
         <TopBar view={view} />
         <div className="view">
-          {view === 'dashboard' && <DashboardView />}
+          {view === 'dashboard' && <DashboardView setView={setView} />}
           {view === 'agents' && <AgentsView />}
           {view === 'teams' && <TeamsView />}
           {view === 'workflows' && <WorkflowsView />}
@@ -149,10 +147,10 @@ function Sidebar({ view, setView }: { view: View; setView: (v: View) => void }) 
       </nav>
 
       <div className="sidebar-foot">
-        <span className="avatar">BT</span>
+        <span className="avatar">CW</span>
         <span className="meta">
-          <strong>Brad Towers</strong>
-          <span>Workspace owner</span>
+          <strong>Conductor Workspace</strong>
+          <span>Desktop control plane</span>
         </span>
       </div>
     </aside>
@@ -190,189 +188,107 @@ function TopBar({ view }: { view: View }) {
 
 /* -------------------------------------------------------------- Dashboard */
 
-function DashboardView() {
-  const recentAgents = agents.slice(0, 6);
-  const onlineCount = tools.filter((t) => t.status === 'connected').length;
-  return (
-    <>
-      <section className="stats-row">
-        {stats.map((s) => (
-          <StatCard key={s.label} stat={s} />
-        ))}
-      </section>
+function DashboardView({ setView }: { setView: (v: View) => void }) {
+  const [inventory, setInventory] = useState<LocalInventory | null>(null);
+  const [loading, setLoading] = useState(false);
+  const desktopAvailable = Boolean(window.conductor);
 
-      <section>
-        <div className="section-head">
-          <h2>Connected tools</h2>
-          <span className="hint">
-            {onlineCount} online · {tools.length} total
-          </span>
-          <span className="right">
-            <button className="btn-ghost">Manage integrations</button>
-          </span>
+  const runScan = async () => {
+    if (!window.conductor) return;
+    setLoading(true);
+    try {
+      setInventory(await window.conductor.system.collectInventory());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    runScan();
+  }, []);
+
+  const categories = useMemo(() => buildLocalToolCategories(inventory), [inventory]);
+  const summary = useMemo(() => localToolSummary(categories), [categories]);
+  const installedTools = categories
+    .flatMap((category) => category.items)
+    .filter((item) => item.readiness === 'installed' || item.readiness === 'running' || item.readiness === 'needs_config');
+  const agentRuntimes = installedTools.filter((item) => item.categoryId === 'agent-runtimes');
+  const prerequisites = installedTools.filter((item) => item.categoryId === 'developer-prerequisites');
+  const runningServices = installedTools.filter((item) => item.categoryId === 'running-services' && item.readiness === 'running');
+
+  if (!desktopAvailable) {
+    return (
+      <div className="local-tools-page">
+        <div className="card local-tools-hero">
+          <span className="eyebrow">Desktop dashboard</span>
+          <h2>Live dashboard data requires the Conductor desktop app</h2>
+          <p>
+            The browser preview no longer shows fake connected tools, sample agents, or synthetic activity. Open the
+            Electron build to inspect installed runtimes, prerequisites, and local services on this Mac.
+          </p>
+          <div className="actions">
+            <button className="btn-ghost primary" disabled>Requires desktop bridge</button>
+            <button className="btn-ghost" onClick={() => setView('tools')}>Open Agent Runtimes</button>
+          </div>
         </div>
-        <div className="tools-strip">
-          {tools.map((tool) => (
-            <ToolCard key={tool.id} tool={tool} />
-          ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="local-tools-page">
+      <div className="card local-tools-hero">
+        <span className="eyebrow">Live local inventory</span>
+        <h2>Dashboard reflects only what is installed on this machine</h2>
+        <p>
+          Counts and tool lists are built from sanitized Electron inventory. Missing tools are handled on Agent
+          Runtimes, not shown here as fake connected integrations.
+        </p>
+        <div className="actions">
+          <button className="btn-ghost primary" onClick={runScan} disabled={loading}>
+            {loading ? 'Scanning…' : 'Refresh inventory'}
+          </button>
+          <button className="btn-ghost" onClick={() => setView('tools')}>Manage Agent Runtimes</button>
+          <span className="hint">{inventory ? 'Inventory loaded' : 'Awaiting local scan'}</span>
         </div>
-      </section>
+      </div>
+
+      <div className="runtime-overview-grid">
+        <RuntimeMetric label="Ready tools" value={summary.installed} />
+        <RuntimeMetric label="Need config" value={summary.needsConfig} />
+        <RuntimeMetric label="Missing/stopped" value={summary.missing} />
+        <RuntimeMetric label="Running services" value={runningServices.length} />
+      </div>
 
       <section className="split">
-        <div>
-          <div className="section-head">
-            <h2>Active agents</h2>
-            <span className="hint">
-              {recentAgents.length} of {agents.length}
-            </span>
-            <span className="right">
-              <button className="btn-ghost">View all</button>
-            </span>
-          </div>
-          <div className="agents-grid">
-            {recentAgents.map((a) => (
-              <AgentCard key={a.id} agent={a} />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="section-head">
-            <h2>Live activity</h2>
-            <span className="right">
-              <span className="chip green">
-                <span className="dot green" /> streaming
-              </span>
-            </span>
-          </div>
-          <div className="card activity">
-            <ActivityList items={activity.slice(0, 8)} />
-          </div>
-        </div>
+        <DashboardInventoryList title="Installed agent runtimes" items={agentRuntimes} empty="No agent runtimes detected yet." />
+        <DashboardInventoryList title="Core prerequisites found" items={prerequisites} empty="No core prerequisites detected yet." />
       </section>
-    </>
-  );
-}
 
-/* -------------------------------------------------------------- StatCard */
-
-function StatCard({ stat }: { stat: Stat }) {
-  const Trend = stat.trend === 'down' ? IconArrowDown : IconArrowUp;
-  return (
-    <div className="card stat-card">
-      <span className="label">{stat.label}</span>
-      <span className="value">{stat.value}</span>
-      <span className={`change ${stat.trend}`}>
-        {stat.trend !== 'flat' && <Trend width={10} height={10} />}
-        {stat.change}
-      </span>
-      <Sparkline points={stat.spark} trend={stat.trend} />
+      <DashboardInventoryList title="Running local services" items={runningServices} empty="No managed local services are running." />
     </div>
   );
 }
 
-function Sparkline({ points, trend }: { points: number[]; trend: 'up' | 'down' | 'flat' }) {
-  const w = 88;
-  const h = 32;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = max - min || 1;
-  const step = w / (points.length - 1);
-  const path = points
-    .map((p, i) => {
-      const x = i * step;
-      const y = h - ((p - min) / range) * (h - 2) - 1;
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(' ');
-  // Single neutral palette — colour comes from the change pill, not the spark.
-  const stroke =
-    trend === 'up'
-      ? 'rgba(34, 197, 94, 0.85)'
-      : trend === 'down'
-        ? 'rgba(255, 255, 255, 0.45)'
-        : 'rgba(255, 255, 255, 0.30)';
-  const fill =
-    trend === 'up'
-      ? 'rgba(34, 197, 94, 0.10)'
-      : 'rgba(255, 255, 255, 0.04)';
-  const area = `${path} L${w} ${h} L0 ${h} Z`;
+function DashboardInventoryList({ title, items, empty }: { title: string; items: LocalToolItem[]; empty: string }) {
   return (
-    <svg className="spark" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-      <path d={area} fill={fill} stroke="none" />
-      <path
-        d={path}
-        fill="none"
-        stroke={stroke}
-        strokeWidth={1.25}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/* -------------------------------------------------------------- Tool cards */
-
-/** Restrained tinted glyph — desaturated tool hue on a dark surface. */
-function toolGlyphStyle(id: ToolId) {
-  const meta = toolMeta[id];
-  const hue = meta?.hue ?? 240;
-  return {
-    background: `hsl(${hue}, 14%, 14%)`,
-    color: `hsl(${hue}, 30%, 78%)`,
-    boxShadow: `inset 0 0 0 1px hsl(${hue}, 18%, 24%)`,
-  };
-}
-
-function statusChip(status: ToolStatus) {
-  switch (status) {
-    case 'connected':
-      return (
-        <span className="chip green">
-          <span className="dot green" /> Connected
-        </span>
-      );
-    case 'degraded':
-      return (
-        <span className="chip amber">
-          <span className="dot amber" /> Degraded
-        </span>
-      );
-    case 'disconnected':
-      return (
-        <span className="chip red">
-          <span className="dot red" /> Offline
-        </span>
-      );
-    case 'pending':
-      return (
-        <span className="chip">
-          <span className="dot" /> Pending
-        </span>
-      );
-  }
-}
-
-function ToolCard({ tool }: { tool: Tool }) {
-  const meta = toolMeta[tool.id];
-  return (
-    <div className="tool-card">
-      <div className="head">
-        <span className="tool-glyph" style={toolGlyphStyle(tool.id)}>
-          {meta?.short ?? '??'}
-        </span>
-        <div>
-          <div className="title">{tool.name}</div>
-          <div className="cat">{tool.category}</div>
-        </div>
+    <div className="card local-tool-section">
+      <div className="section-head compact">
+        <h2>{title}</h2>
+        <span className="hint">Detected only</span>
       </div>
-      <div className="body">{tool.description}</div>
-      <div className="row">
-        <span>{statusChip(tool.status)}</span>
-        <span className="num">
-          {tool.agentsRunning} agent{tool.agentsRunning === 1 ? '' : 's'}
-        </span>
+      <div className="local-tool-list">
+        {items.map((item) => (
+          <div className="local-tool-row dashboard-tool-row" key={`${title}-${item.id}`}>
+            <span className={`status-dot ${statusDotClass(item.readiness)}`} />
+            <div className="local-tool-main">
+              <strong>{item.label}</strong>
+              <span>{item.detail}</span>
+            </div>
+            <span className={`chip ${statusChipClass(item.readiness)}`}>{readinessLabel(item.readiness)}</span>
+          </div>
+        ))}
+        {!items.length && <p className="empty-state">{empty}</p>}
       </div>
     </div>
   );
@@ -764,20 +680,11 @@ function WorkflowCanvas({ wf }: { wf: Workflow }) {
 
 /* -------------------------------------------------------------- Tools view */
 
-const REQUIRED_AGENT_RUNTIME_IDS = ['openclaw', 'hermes', 'claude', 'codex', 'gemini'];
-const REQUIRED_CORE_TOOL_IDS = ['git', 'node', 'npm', 'pnpm', 'python3', 'curl'];
-const TOOL_RECIPE_IDS: Record<string, string> = {
-  openclaw: 'openclaw',
-  hermes: 'hermes-agent',
-  claude: 'claude-code',
-  codex: 'codex-cli',
-  gemini: 'gemini-cli',
-};
-
 function ToolsView({ setView }: { setView: (v: View) => void }) {
   const [inventory, setInventory] = useState<LocalInventory | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+  const [selectedAction, setSelectedAction] = useState<LocalToolAction['kind']>('preview_install');
   const desktopAvailable = Boolean(window.conductor);
 
   const runScan = async () => {
@@ -794,27 +701,39 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
     runScan();
   }, []);
 
-  const runtimeTools = REQUIRED_AGENT_RUNTIME_IDS.map((id) => inventory?.tools[id] ?? fallbackInventoryTool(id, 'agent-runtime'));
-  const coreTools = REQUIRED_CORE_TOOL_IDS.map((id) => inventory?.tools[id] ?? fallbackInventoryTool(id, 'developer-prerequisite'));
-  const selectedRecipe = selectedRecipeId ? getIntegrationRecipe(selectedRecipeId) : null;
-  const availableRuntimes = runtimeTools.filter((tool) => tool.available).length;
-  const readyPrereqs = coreTools.filter((tool) => tool.available).length;
+  const categories = useMemo(() => buildLocalToolCategories(inventory), [inventory]);
+  const summary = useMemo(() => localToolSummary(categories), [categories]);
+  const selectedItem = categories.flatMap((category) => category.items).find((item) => item.recipeId === selectedRecipeId) ?? null;
+  const selectedRecipe = selectedItem?.recipe ?? null;
+  const selectedHealthChecks = selectedItem?.healthChecks ?? [];
+
+  const selectAction = (item: LocalToolItem, action: LocalToolAction) => {
+    if (action.kind === 'open_docs' && action.docsUrl) {
+      window.open(action.docsUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (!item.recipeId) return;
+    setSelectedRecipeId(item.recipeId);
+    setSelectedAction(action.kind);
+  };
 
   if (!desktopAvailable) {
     return (
       <div className="local-tools-page">
         <div className="card local-tools-hero">
-          <span className="eyebrow">Desktop inventory</span>
-          <h2>Local tool detection needs the desktop app</h2>
+          <span className="eyebrow">Desktop-only inventory</span>
+          <h2>Agent runtimes are managed by the desktop app</h2>
           <p>
-            Browser preview cannot inspect installed CLIs or local config. Run the Electron app to detect agent
-            runtimes, developer prerequisites, and safe installer preview paths.
+            Browser preview cannot inspect installed CLIs, running local services, or configuration files because the
+            Electron preload bridge is unavailable. This page stays read-only here and does not execute commands.
           </p>
           <div className="actions">
-            <button className="btn-ghost primary" disabled>Scan local machine</button>
-            <span className="hint">Use npm run desktop:dev locally.</span>
+            <button className="btn-ghost primary" disabled>Requires desktop bridge</button>
+            <button className="btn-ghost" onClick={() => setView('integrations')}>Open recipe previews</button>
+            <span className="hint">Run `npm run desktop:dev` for local inventory.</span>
           </div>
         </div>
+        <AgentRuntimeBrowserPreview categories={categories} />
       </div>
     );
   }
@@ -822,145 +741,239 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
   return (
     <div className="local-tools-page">
       <div className="card local-tools-hero">
-        <span className="eyebrow">Local Tools</span>
-        <h2>Agent runtimes and developer prerequisites</h2>
+        <span className="eyebrow">Primary runtime control</span>
+        <h2>Install, configure, and monitor local agent runtimes</h2>
         <p>
-          Conductor uses the Electron inventory to detect installed runtimes and the core tools needed to install or
-          manage them. Install actions are shown as previews and explicit guided paths, not arbitrary command entry.
+          Conductor uses sanitized Electron inventory for runtimes, prerequisites, deployment tools, and running
+          services. Actions preview trusted recipes and health checks; start/stop/install execution only belongs in
+          explicit allowlisted main-process flows.
         </p>
         <div className="actions">
           <button className="btn-ghost primary" onClick={runScan} disabled={loading}>
-            {loading ? 'Scanning…' : 'Refresh local inventory'}
+            {loading ? 'Scanning…' : 'Refresh inventory'}
           </button>
           <span className="hint">
-            {inventory ? `${availableRuntimes}/${runtimeTools.length} runtimes · ${readyPrereqs}/${coreTools.length} prerequisites` : 'Awaiting local scan'}
+            {inventory
+              ? `${summary.installed} ready · ${summary.needsConfig} need config · ${summary.missing} missing/stopped`
+              : 'Awaiting local scan'}
           </span>
         </div>
       </div>
 
-      <div className="local-tools-sections">
-        <LocalToolSection
-          title="Agent runtimes"
-          subtitle="OpenClaw, Hermes, Claude Code, Codex, and Gemini CLI"
-          tools={runtimeTools}
-          selectedRecipeId={selectedRecipeId}
-          onPreviewInstall={setSelectedRecipeId}
-        />
-        <LocalToolSection
-          title="Core prerequisites"
-          subtitle="Developer tools required by runtime installers and local orchestration"
-          tools={coreTools}
-          selectedRecipeId={selectedRecipeId}
-          onPreviewInstall={setSelectedRecipeId}
-        />
+      <div className="runtime-overview-grid">
+        <RuntimeMetric label="Ready" value={summary.installed} />
+        <RuntimeMetric label="Needs config" value={summary.needsConfig} />
+        <RuntimeMetric label="Missing or stopped" value={summary.missing} />
+        <RuntimeMetric label="Trusted recipes" value={summary.recipes} />
       </div>
 
-      <div className="card install-preview-panel">
+      <div className="local-tools-sections">
+        {categories.map((category) => (
+          <LocalToolSection
+            key={category.id}
+            category={category}
+            selectedRecipeId={selectedRecipeId}
+            onAction={selectAction}
+          />
+        ))}
+      </div>
+
+      <div className="card install-preview-panel runtime-action-panel">
         <div className="section-head compact">
-          <h2>Install path preview</h2>
-          <span className="hint">No command execution from this panel</span>
+          <h2>Action preview</h2>
+          <span className="hint">Renderer-safe; no arbitrary command execution</span>
         </div>
         {selectedRecipe ? (
           <>
             <div className="install-preview-head">
               <div>
                 <strong>{selectedRecipe.name}</strong>
-                <span>{selectedRecipe.description}</span>
+                <span>{selectedActionLabel(selectedAction)} · {selectedRecipe.description}</span>
               </div>
-              <button className="btn-ghost primary" onClick={() => setView('integrations')}>Open installer workflow</button>
+              <div className="actions">
+                <button className="btn-ghost" onClick={() => window.open(selectedRecipe.docsUrl, '_blank', 'noopener,noreferrer')}>Open docs</button>
+                <button className="btn-ghost primary" onClick={() => setView('integrations')}>Open installer workflow</button>
+              </div>
             </div>
-            <div className="install-step-list compact">
-              {selectedRecipe.install.steps.map((step, index) => (
-                <div className="install-step" key={step.id}>
-                  <span className="step-number">{index + 1}</span>
-                  <div>
-                    <strong>{step.title}</strong>
-                    <span>{step.description}</span>
-                  </div>
-                  <span className={`chip ${step.requiresApproval ? 'chip-muted' : 'chip-ok'}`}>
-                    {step.requiresApproval ? 'Approval' : step.kind}
-                  </span>
-                </div>
-              ))}
+            {selectedAction === 'health_check' ? (
+              <HealthPreview checks={selectedHealthChecks} />
+            ) : selectedAction === 'configure' ? (
+              <RecipeStepPreview steps={selectedRecipe.install.steps.filter((step) => step.kind === 'configure' || step.kind === 'manual')} empty="No configure step is published for this recipe yet." />
+            ) : (
+              <RecipeStepPreview steps={selectedRecipe.install.steps} empty="No install preview is available for this recipe." />
+            )}
+            <div className="install-callout runtime-callout">
+              <IconInfo />
+              <span>
+                This panel previews recipe metadata and health checks only. It does not accept shell input and it does
+                not run commands from the renderer.
+              </span>
             </div>
           </>
         ) : (
-          <p className="empty-state">Select a missing or detected runtime to preview its guided install path.</p>
+          <p className="empty-state">Select Preview install, Configure, or Health check on an agent runtime to inspect the safe path.</p>
         )}
       </div>
     </div>
   );
 }
 
-function fallbackInventoryTool(id: string, category: InventoryToolStatus['category']): InventoryToolStatus {
-  const recipeId = TOOL_RECIPE_IDS[id];
-  const recipe = recipeId ? getIntegrationRecipe(recipeId) : null;
-  const labels: Record<string, string> = {
-    git: 'Git',
-    node: 'Node.js',
-    npm: 'npm',
-    pnpm: 'pnpm',
-    python3: 'Python 3',
-    curl: 'curl',
-  };
-  return {
-    id,
-    label: recipe?.name ?? labels[id] ?? id,
-    command: id,
-    category,
-    recipeId,
-    available: false,
-    status: 'missing' as const,
-    version: null,
-    error: 'not scanned',
-  };
+function RuntimeMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="card runtime-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
 }
 
 function LocalToolSection({
-  title,
-  subtitle,
-  tools,
+  category,
   selectedRecipeId,
-  onPreviewInstall,
+  onAction,
 }: {
-  title: string;
-  subtitle: string;
-  tools: InventoryToolStatus[];
+  category: LocalToolCategory;
   selectedRecipeId: string | null;
-  onPreviewInstall: (recipeId: string) => void;
+  onAction: (item: LocalToolItem, action: LocalToolAction) => void;
 }) {
   return (
     <div className="card local-tool-section">
       <div className="section-head compact">
-        <h2>{title}</h2>
-        <span className="hint">{subtitle}</span>
+        <h2>{category.title}</h2>
+        <span className="hint">{category.subtitle}</span>
       </div>
       <div className="local-tool-list">
-        {tools.map((tool) => (
+        {category.items.map((tool) => (
           <div className="local-tool-row" key={tool.id}>
-            <span className={`status-dot ${tool.available ? 'ok' : 'missing'}`} />
+            <span className={`status-dot ${statusDotClass(tool.readiness)}`} />
             <div className="local-tool-main">
               <strong>{tool.label}</strong>
-              <span>{tool.available ? tool.version : tool.error ?? 'not found'}</span>
+              <span>{tool.detail}</span>
+              <em>{tool.description}</em>
             </div>
-            <span className={`chip ${tool.available ? 'chip-ok' : 'chip-muted'}`}>
-              {tool.available ? 'Detected' : 'Missing'}
+            <span className={`chip ${statusChipClass(tool.readiness)}`}>
+              {readinessLabel(tool.readiness)}
             </span>
-            {tool.recipeId ? (
-              <button
-                className={`btn-ghost ${selectedRecipeId === tool.recipeId ? 'primary' : ''}`}
-                onClick={() => onPreviewInstall(tool.recipeId as string)}
-              >
-                Preview path
-              </button>
-            ) : (
-              <span className="hint">Managed externally</span>
-            )}
+            <div className="tool-row-actions">
+              {tool.actions.map((action) => (
+                <button
+                  className={`btn-ghost ${selectedRecipeId === action.recipeId && action.kind === 'preview_install' ? 'primary' : ''}`}
+                  disabled={action.disabled}
+                  key={`${tool.id}-${action.kind}`}
+                  onClick={() => onAction(tool, action)}
+                  title={action.title}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
           </div>
         ))}
+        {!category.items.length && <p className="empty-state">No local services detected yet. Refresh inventory from the desktop app.</p>}
       </div>
     </div>
   );
+}
+
+function RecipeStepPreview({ steps, empty }: { steps: IntegrationRecipe['install']['steps']; empty: string }) {
+  if (!steps.length) return <p className="empty-state">{empty}</p>;
+  return (
+    <div className="install-step-list compact">
+      {steps.map((step, index) => (
+        <div className="install-step" key={step.id}>
+          <span className="step-number">{index + 1}</span>
+          <div>
+            <strong>{step.title}</strong>
+            <span>{step.description}</span>
+          </div>
+          <span className={`chip ${step.requiresApproval ? 'chip-muted' : 'chip-ok'}`}>
+            {step.requiresApproval ? 'Approval' : step.kind}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HealthPreview({ checks }: { checks: LocalToolItem['healthChecks'] }) {
+  if (!checks.length) return <p className="empty-state">No health checks are published for this runtime yet.</p>;
+  return (
+    <div className="install-step-list compact">
+      {checks.map((check, index) => (
+        <div className="install-step" key={check.id}>
+          <span className="step-number">{index + 1}</span>
+          <div>
+            <strong>{check.label}</strong>
+            <span>{check.command} {check.args.join(' ')} · expects {check.expected}</span>
+          </div>
+          <span className="chip chip-muted">Preview</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AgentRuntimeBrowserPreview({ categories }: { categories: LocalToolCategory[] }) {
+  return (
+    <div className="local-tools-sections">
+      {categories.slice(0, 3).map((category) => (
+        <div className="card local-tool-section" key={category.id}>
+          <div className="section-head compact">
+            <h2>{category.title}</h2>
+            <span className="hint">Desktop bridge required for live status</span>
+          </div>
+          <div className="local-tool-list">
+            {category.items.slice(0, 4).map((item) => (
+              <div className="local-tool-row browser-preview-row" key={item.id}>
+                <span className="status-dot missing" />
+                <div className="local-tool-main">
+                  <strong>{item.label}</strong>
+                  <span>Unavailable in browser preview</span>
+                </div>
+                <span className="chip chip-muted">Requires desktop bridge</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function readinessLabel(readiness: LocalToolItem['readiness']) {
+  const labels: Record<LocalToolItem['readiness'], string> = {
+    installed: 'Installed',
+    missing: 'Missing',
+    needs_config: 'Needs config',
+    running: 'Running',
+    stopped: 'Stopped',
+  };
+  return labels[readiness];
+}
+
+function statusDotClass(readiness: LocalToolItem['readiness']) {
+  if (readiness === 'installed' || readiness === 'running') return 'ok';
+  if (readiness === 'needs_config') return 'warn';
+  return 'missing';
+}
+
+function statusChipClass(readiness: LocalToolItem['readiness']) {
+  if (readiness === 'installed' || readiness === 'running') return 'chip-ok';
+  if (readiness === 'needs_config') return 'chip-warn';
+  return 'chip-muted';
+}
+
+function selectedActionLabel(action: LocalToolAction['kind']) {
+  const labels: Record<LocalToolAction['kind'], string> = {
+    preview_install: 'Install preview',
+    configure: 'Configuration preview',
+    health_check: 'Health check preview',
+    open_docs: 'Documentation',
+    refresh: 'Inventory refresh',
+    coming_soon: 'Coming soon',
+    requires_desktop: 'Requires desktop',
+  };
+  return labels[action];
 }
 
 /* -------------------------------------------------------------- Integrations view */
@@ -1232,10 +1245,10 @@ function DiagnosticsView() {
             <div><span>Platform</span><strong>{inventory.machine.platform}</strong></div>
             <div><span>Architecture</span><strong>{inventory.machine.arch}</strong></div>
             <div><span>OS release</span><strong>{inventory.machine.osRelease}</strong></div>
-            <div><span>Hostname</span><strong>{inventory.machine.hostname}</strong></div>
+            <div><span>Hostname</span><strong>Hidden in UI</strong></div>
             <div><span>Desktop capable</span><strong>{inventory.machine.desktopCapable ? 'Yes' : 'No'}</strong></div>
             <div><span>Bridge smoke</span><strong>{inventory.desktopSmoke.status === 'ready' ? 'Ready' : 'Needs attention'}</strong></div>
-            <div className="wide"><span>Home directory</span><strong>{inventory.machine.homeDir}</strong></div>
+            <div className="wide"><span>Home directory</span><strong>Collected by main process, not displayed</strong></div>
           </div>
         </div>
       )}
@@ -1293,7 +1306,7 @@ function DiagnosticsView() {
               <span className={`status-dot ${inventory.configs.openclawConfig?.exists ? 'ok' : 'missing'}`} />
               <div>
                 <strong>OpenClaw configuration</strong>
-                <span>{inventory.configs.openclawConfig?.path ?? 'No config path scanned'}</span>
+                <span>{inventory.configs.openclawConfig?.exists ? 'Config file presence detected' : 'No config file detected'}</span>
               </div>
               <span className={`chip ${inventory.configs.openclawConfig?.exists ? 'chip-ok' : 'chip-muted'}`}>
                 {inventory.configs.openclawConfig?.exists ? 'Found' : 'Missing'}
@@ -1336,9 +1349,9 @@ function DiagnosticsView() {
               <span className={`status-dot ${config.exists ? 'ok' : 'missing'}`} />
               <div>
                 <strong>{name}</strong>
-                <span>{config.path}</span>
+                <span>{config.exists ? 'Config file presence detected' : 'Expected config file not detected'}</span>
                 {config.secrets && Object.keys(config.secrets).length > 0 && (
-                  <span>Secrets present: {Object.keys(config.secrets).join(', ')}</span>
+                  <span>{Object.keys(config.secrets).length} secret marker(s) present; names and values hidden</span>
                 )}
               </div>
               <span className={`chip ${config.exists ? 'chip-ok' : 'chip-muted'}`}>

@@ -4,11 +4,7 @@ export type ToolId =
   | 'openclaw'
   | 'hermes'
   | 'claude-code'
-  | 'codex'
-  | 'cursor'
-  | 'aider'
-  | 'devin'
-  | 'github';
+  | 'codex';
 
 export type ToolStatus = 'connected' | 'degraded' | 'disconnected' | 'pending';
 

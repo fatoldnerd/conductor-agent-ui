@@ -4,7 +4,7 @@ Conductor is a desktop app first. The hosted Vercel build is only a preview surf
 
 ## Target test machine
 
-Use a real desktop host, ideally Brad's Mac Mini or laptop.
+Use a real desktop host with the Electron shell available.
 
 Hermes currently runs on a headless VPS, so Hermes can build and validate the code but cannot visually smoke-test the Electron UI on the VPS.
 
@@ -31,8 +31,9 @@ Expected desktop signals:
 - Electron shell active, not the Vercel/browser fallback.
 - Desktop bridge smoke status: `Ready`.
 - Machine platform: `darwin` on macOS.
-- Tooling statuses for OpenClaw, Claude Code, Codex, Node, npm, pnpm, git, tmux.
-- OpenClaw runtime status reflects a local OpenClaw process only. It should not show Brad-specific instance names from another machine.
+- Tooling statuses for OpenClaw, Hermes, Claude Code, Codex, Gemini CLI, Node, npm, pnpm, git, tmux, and deployment CLIs where installed.
+- Agent Runtimes actions are previews unless routed through an explicit main-process installer recipe and native approval dialog.
+- OpenClaw runtime status reflects a local OpenClaw process only. It should not show personal instance names from another machine.
 
 ## CLI smoke check
 
