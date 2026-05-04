@@ -24,6 +24,7 @@ import {
 } from './integrations/recipes';
 import {
   buildLocalToolCategories,
+  isDetectedLocalToolItem,
   localToolSummary,
   type LocalToolAction,
   type LocalToolCategory,
@@ -31,6 +32,7 @@ import {
 } from './localTools';
 import { runtimeAvailable } from './agentRuntimeAvailability';
 import { deriveInventoryViewState } from './inventoryViewState';
+import { readinessLabel } from './runtimeReadiness';
 import type {
   AgentRunEvent,
   AgentRunSnapshot,
@@ -215,7 +217,7 @@ function DashboardView({ setView }: { setView: (v: View) => void }) {
   );
   const installedTools = categories
     .flatMap((category) => category.items)
-    .filter((item) => item.readiness === 'installed' || item.readiness === 'running' || item.readiness === 'needs_config');
+    .filter(isDetectedLocalToolItem);
   const agentRuntimes = installedTools.filter((item) => item.categoryId === 'agent-runtimes');
   const prerequisites = installedTools.filter((item) => item.categoryId === 'developer-prerequisites');
   const runningServices = installedTools.filter((item) => item.categoryId === 'running-services' && item.readiness === 'running');
@@ -519,13 +521,21 @@ function LocalToolSection({
             <span className={`status-dot ${statusDotClass(tool.readiness)}`} />
             <div className="local-tool-main">
               <strong>{tool.label}</strong>
+              <span>{tool.categoryLabel}{tool.version ? ` · ${tool.version}` : ''}</span>
+              <span>{tool.diagnosis}</span>
               <span>{tool.detail}</span>
+              {tool.supportHint && <em>{tool.supportHint}</em>}
               <em>{tool.description}</em>
             </div>
             <span className={`chip ${statusChipClass(tool.readiness)}`}>
               {readinessLabel(tool.readiness)}
             </span>
             <div className="tool-row-actions">
+              {tool.primaryAction && (
+                <span className="chip chip-muted" title={tool.primaryAction.description}>
+                  Primary: {tool.primaryAction.label}
+                </span>
+              )}
               {tool.actions.map((action) => (
                 <button
                   className={`btn-ghost ${selectedRecipeId === action.recipeId && action.kind === 'preview_install' ? 'primary' : ''}`}
@@ -582,22 +592,6 @@ function HealthPreview({ checks }: { checks: LocalToolItem['healthChecks'] }) {
       ))}
     </div>
   );
-}
-
-function readinessLabel(readiness: LocalToolItem['readiness']) {
-  const labels: Record<LocalToolItem['readiness'], string> = {
-    ready: 'Ready',
-    installed: 'Installed',
-    missing: 'Missing',
-    needs_config: 'Needs config',
-    needs_credentials: 'Needs credentials',
-    broken: 'Broken',
-    unsupported: 'Unsupported',
-    running: 'Running',
-    stopped: 'Stopped',
-    not_scanned: 'Not scanned',
-  };
-  return labels[readiness];
 }
 
 function statusDotClass(readiness: LocalToolItem['readiness']) {

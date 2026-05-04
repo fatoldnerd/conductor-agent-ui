@@ -9,4 +9,11 @@ describe('production operational UI data sources', () => {
   it('does not render known runtime rows in browser Agent Runtimes mode', () => {
     expect(appSource).not.toContain('AgentRuntimeBrowserPreview');
   });
+
+  it('renders runtime cards from canonical card metadata fields', () => {
+    expect(appSource).toContain('tool.categoryLabel');
+    expect(appSource).toContain('tool.diagnosis');
+    expect(appSource).toContain('tool.primaryAction');
+    expect(appSource).toContain('readinessLabel(tool.readiness)');
+  });
 });

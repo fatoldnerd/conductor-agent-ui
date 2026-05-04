@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLocalToolCategories, fallbackInventoryTool, localToolSummary } from './localTools';
+import { buildLocalToolCategories, fallbackInventoryTool, isDetectedLocalToolItem, localToolSummary } from './localTools';
 import type { LocalInventory } from './electron';
 
 function tool(id: string, overrides: Partial<LocalInventory['tools'][string]> = {}): LocalInventory['tools'][string] {
@@ -80,10 +80,71 @@ describe('local tool inventory view model', () => {
     const hermes = runtimes.find((item) => item.id === 'hermes');
     const codex = runtimes.find((item) => item.id === 'codex-cli');
 
-    expect(hermes).toMatchObject({ readiness: 'needs_config', recipeId: 'hermes-agent' });
-    expect(codex).toMatchObject({ readiness: 'ready', recipeId: 'codex-cli' });
+    expect(hermes).toMatchObject({
+      categoryLabel: 'Agent runtime',
+      readiness: 'needs_config',
+      recipeId: 'hermes-agent',
+      supportHint: expect.stringContaining('Configuration file was not detected'),
+      primaryAction: expect.objectContaining({ kind: 'configure', executesCommand: false }),
+    });
+    expect(codex).toMatchObject({
+      categoryLabel: 'Agent runtime',
+      readiness: 'ready',
+      recipeId: 'codex-cli',
+      version: 'codex 1.2.3',
+      diagnosis: expect.stringContaining('Detected locally'),
+      primaryAction: expect.objectContaining({ kind: 'health_check', executesCommand: false }),
+    });
     expect(hermes?.actions.map((action) => action.kind)).toContain('preview_install');
     expect(hermes?.actions.map((action) => action.kind)).toContain('health_check');
+  });
+
+  it('maps Electron inventory runtime ids to canonical ready runtime cards', () => {
+    const electronInventory: LocalInventory = {
+      ...inventory,
+      tools: {
+        claude: tool('claude', {
+          label: 'Claude Code',
+          command: 'claude',
+          category: 'agent-runtime',
+          recipeId: 'claude-code',
+          available: true,
+          status: 'ready',
+          version: '2.1.126 (Claude Code)',
+        }),
+        codex: tool('codex', {
+          label: 'Codex CLI',
+          command: 'codex',
+          category: 'agent-runtime',
+          recipeId: 'codex-cli',
+          available: true,
+          status: 'ready',
+          version: 'codex-cli 0.125.0',
+        }),
+        gemini: tool('gemini', {
+          label: 'Gemini CLI',
+          command: 'gemini',
+          category: 'agent-runtime',
+          recipeId: 'gemini-cli',
+          available: true,
+          status: 'ready',
+          version: '0.1.7',
+        }),
+      },
+      configs: {},
+      services: {},
+    };
+    const categories = buildLocalToolCategories(electronInventory);
+    const runtimes = categories.find((category) => category.id === 'agent-runtimes')?.items ?? [];
+    const detectedRuntimeIds = runtimes.filter(isDetectedLocalToolItem).map((item) => item.id);
+
+    expect(runtimes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'claude-code', label: 'Claude Code', readiness: 'ready', version: '2.1.126 (Claude Code)' }),
+      expect.objectContaining({ id: 'codex-cli', label: 'Codex CLI', readiness: 'ready', version: 'codex-cli 0.125.0' }),
+      expect.objectContaining({ id: 'gemini-cli', label: 'Gemini CLI', readiness: 'ready', version: '0.1.7' }),
+    ]));
+    expect(detectedRuntimeIds).toEqual(expect.arrayContaining(['claude-code', 'codex-cli', 'gemini-cli']));
+    expect(localToolSummary(categories).installed).toBe(3);
   });
 
   it('distinguishes config-needed from credential-needed runtime state', () => {
@@ -100,6 +161,8 @@ describe('local tool inventory view model', () => {
     expect(runtimes.find((item) => item.id === 'hermes')).toMatchObject({
       readiness: 'needs_credentials',
       diagnosis: expect.stringContaining('credential markers'),
+      supportHint: expect.stringContaining('Credential markers were not detected'),
+      primaryAction: expect.objectContaining({ kind: 'configure', executesCommand: false }),
     });
   });
 
@@ -120,6 +183,38 @@ describe('local tool inventory view model', () => {
       available: false,
       status: 'not_scanned',
       error: 'not scanned',
+    });
+    expect(runtimes.find((item) => item.id === 'gemini-cli')).toMatchObject({
+      readiness: 'not_scanned',
+      version: null,
+      detail: 'Awaiting desktop inventory scan',
+      primaryAction: expect.objectContaining({ kind: 'refresh', executesCommand: false, disabled: true }),
+    });
+  });
+
+  it('represents SSH tunnel or port-in-use services without calling them running', () => {
+    const categories = buildLocalToolCategories({
+      ...inventory,
+      services: {
+        hermesApi: {
+          id: 'hermesApi',
+          label: 'Hermes API server',
+          running: false,
+          status: 'port_in_use',
+          port: 8642,
+          portState: 'ssh_tunnel',
+          detail: 'Port is in use by an SSH tunnel, not a confirmed local Hermes service.',
+        },
+      },
+    });
+    const services = categories.find((category) => category.id === 'running-services')?.items ?? [];
+
+    expect(services[0]).toMatchObject({
+      label: 'Hermes API server',
+      categoryLabel: 'Local service',
+      readiness: 'stopped',
+      detail: 'Port is in use by an SSH tunnel, not a confirmed local Hermes service.',
+      supportHint: expect.stringContaining('port is occupied'),
     });
   });
 });

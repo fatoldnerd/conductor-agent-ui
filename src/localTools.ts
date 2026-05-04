@@ -2,6 +2,7 @@ import type { InventoryConfigStatus, InventoryServiceStatus, InventoryToolStatus
 import { getIntegrationRecipe, listIntegrationRecipes, type IntegrationHealthCheck, type IntegrationRecipe } from './integrations/recipes';
 import {
   CANONICAL_RUNTIME_IDS,
+  RUNTIME_CATEGORY_LABELS,
   RUNTIME_INVENTORY_KEYS,
   readinessDiagnosis,
   safeAction,
@@ -27,10 +28,13 @@ export type LocalToolItem = {
   label: string;
   description: string;
   categoryId: LocalToolCategoryId;
+  categoryLabel: string;
   readiness: LocalToolReadiness;
   version: string | null;
   detail: string;
   diagnosis: string;
+  supportHint?: string;
+  primaryAction?: LocalToolAction;
   recipeId?: string;
   recipe?: IntegrationRecipe;
   healthChecks: IntegrationHealthCheck[];
@@ -81,6 +85,12 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 const RUNTIME_DESCRIPTIONS: Record<string, string> = {
   openclaw: 'Open-source agentic development environment and orchestration layer for coding agents.',
   hermes: 'Provider-agnostic agent framework with skills, memory, gateway integrations, cron jobs, and dashboard support.',
+};
+const CATEGORY_LABELS: Record<LocalToolCategoryId, string> = {
+  'agent-runtimes': RUNTIME_CATEGORY_LABELS['agent-runtime'],
+  'developer-prerequisites': RUNTIME_CATEGORY_LABELS['developer-prerequisite'],
+  'deployment-tools': RUNTIME_CATEGORY_LABELS['deployment-tool'],
+  'running-services': RUNTIME_CATEGORY_LABELS.service,
 };
 
 function knownRecipe(id?: string): IntegrationRecipe | undefined {
@@ -153,6 +163,29 @@ function toolActions(recipe?: IntegrationRecipe, installed = false): LocalToolAc
   return actions;
 }
 
+function primaryActionFor(readiness: LocalToolReadiness, actions: LocalToolAction[]): LocalToolAction | undefined {
+  if (readiness === 'not_scanned') {
+    return { ...safeAction('refresh'), disabled: true, title: 'Use Refresh inventory above to scan from the desktop app.' };
+  }
+  if (readiness === 'needs_config' || readiness === 'needs_credentials') {
+    return actions.find((action) => action.kind === 'configure') ?? actions.find((action) => !action.disabled);
+  }
+  if (readiness === 'ready' || readiness === 'installed' || readiness === 'running') {
+    return actions.find((action) => action.kind === 'health_check') ?? actions.find((action) => !action.disabled);
+  }
+  if (readiness === 'missing') {
+    return actions.find((action) => action.kind === 'preview_install') ?? actions.find((action) => action.kind === 'open_docs');
+  }
+  return actions.find((action) => !action.disabled);
+}
+
+function runtimeSupportHint(recipe?: IntegrationRecipe, config?: InventoryConfigStatus, credentials?: InventoryConfigStatus): string | undefined {
+  if (config && !config.exists) return 'Configuration file was not detected. Use Configure for safe setup guidance.';
+  if (credentials?.exists && !hasAnyCredentialMarker(credentials)) return 'Credential markers were not detected. Configure credentials outside the renderer.';
+  if (recipe?.docsUrl) return 'Documentation is available from the runtime recipe.';
+  return undefined;
+}
+
 function toRuntimeItem(inventory: LocalInventory | null, id: CanonicalRuntimeId): LocalToolItem {
   const inventoryKey = RUNTIME_INVENTORY_KEYS[id];
   const tool = inventory?.tools[inventoryKey] ?? fallbackInventoryTool(inventoryKey, 'agent-runtime');
@@ -160,20 +193,24 @@ function toRuntimeItem(inventory: LocalInventory | null, id: CanonicalRuntimeId)
   const config = runtimeConfig(inventory, id);
   const credentials = runtimeCredentialConfig(inventory, id);
   const readiness = runtimeReadiness(tool, config, credentials);
+  const actions = toolActions(recipe, tool.available);
   return {
     id,
     label: tool.label,
     description: recipe?.description ?? RUNTIME_DESCRIPTIONS[id] ?? 'Local agent runtime detected through the desktop inventory bridge.',
     categoryId: 'agent-runtimes',
+    categoryLabel: CATEGORY_LABELS['agent-runtimes'],
     readiness,
     version: tool.version,
     detail: runtimeDetail(tool, config),
     diagnosis: readinessDiagnosis(readiness),
+    supportHint: runtimeSupportHint(recipe, config, credentials),
     recipeId: recipe?.id,
     recipe,
     healthChecks: recipe?.healthChecks ?? [],
     config,
-    actions: toolActions(recipe, tool.available),
+    actions,
+    primaryAction: primaryActionFor(readiness, actions),
   };
 }
 
@@ -181,11 +218,13 @@ function toToolItem(inventory: LocalInventory | null, id: string, categoryId: 'd
   const category = categoryId === 'developer-prerequisites' ? 'developer-prerequisite' : 'deployment-tool';
   const tool = inventory?.tools[id] ?? fallbackInventoryTool(id, category);
   const readiness = tool.status === 'not_scanned' ? 'not_scanned' : tool.status === 'ready' && !tool.available ? 'broken' : tool.available ? 'installed' : 'missing';
+  const actions: LocalToolAction[] = [{ ...safeAction('health_check'), disabled: true, title: 'Preview only; no arbitrary command execution from the renderer.' }];
   return {
     id,
     label: tool.label,
     description: TOOL_DESCRIPTIONS[id] ?? 'Local command detected through the desktop inventory bridge.',
     categoryId,
+    categoryLabel: CATEGORY_LABELS[categoryId],
     readiness,
     version: tool.version,
     detail: tool.status === 'not_scanned'
@@ -196,30 +235,36 @@ function toToolItem(inventory: LocalInventory | null, id: string, categoryId: 'd
         ? tool.version ?? 'Detected'
         : tool.error ?? 'Not found in local PATH',
     diagnosis: readinessDiagnosis(readiness),
+    supportHint: readiness === 'not_scanned' ? 'Run desktop inventory refresh before treating this tool as installed or missing.' : undefined,
     recipeId: tool.recipeId,
     recipe: knownRecipe(tool.recipeId),
     healthChecks: [],
-    actions: [{ ...safeAction('health_check'), disabled: true, title: 'Preview only; no arbitrary command execution from the renderer.' }],
+    actions,
+    primaryAction: primaryActionFor(readiness, actions),
   };
 }
 
 function toServiceItem(service: InventoryServiceStatus): LocalToolItem {
   const readiness = service.running ? 'running' : 'stopped';
+  const actions: LocalToolAction[] = [
+    { ...safeAction('health_check'), disabled: true, title: 'Service health execution is not wired yet.' },
+    { ...safeAction('coming_soon', { label: 'Manage' }), disabled: true, title: 'Start/stop controls require explicit main-process recipes.' },
+  ];
   return {
     id: service.id,
     label: service.label,
     description: service.port ? `Expected localhost listener on port ${service.port}.` : 'Generic local process detection from sanitized inventory.',
     categoryId: 'running-services',
+    categoryLabel: CATEGORY_LABELS['running-services'],
     readiness,
     version: null,
     detail: service.detail ?? (service.running ? 'Running' : 'Stopped'),
     diagnosis: readinessDiagnosis(readiness),
+    supportHint: service.status === 'port_in_use' ? 'The port is occupied, but Conductor did not confirm this is the named service.' : undefined,
     healthChecks: [],
     service,
-    actions: [
-      { ...safeAction('health_check'), disabled: true, title: 'Service health execution is not wired yet.' },
-      { ...safeAction('coming_soon', { label: 'Manage' }), disabled: true, title: 'Start/stop controls require explicit main-process recipes.' },
-    ],
+    actions,
+    primaryAction: primaryActionFor(readiness, actions),
   };
 }
 
@@ -263,4 +308,8 @@ export function localToolSummary(categories: LocalToolCategory[]) {
     notScanned: items.filter((item) => item.readiness === 'not_scanned').length,
     recipes: listIntegrationRecipes().length,
   };
+}
+
+export function isDetectedLocalToolItem(item: LocalToolItem): boolean {
+  return ['ready', 'installed', 'running', 'needs_config', 'needs_credentials'].includes(item.readiness);
 }
