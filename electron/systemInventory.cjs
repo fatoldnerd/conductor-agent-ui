@@ -41,6 +41,7 @@ function defaultDeps() {
     }),
     access: fs.access,
     readFile: fs.readFile,
+    readdir: fs.readdir,
   };
 }
 
@@ -59,11 +60,42 @@ const COMMON_COMMAND_DIRS = [
   '/sbin',
 ];
 
-function commandSearchDirs(deps) {
+function userManagedBinDirs(home) {
+  return [
+    path.join(home, '.npm-global', 'bin'),
+    path.join(home, '.local', 'bin'),
+    path.join(home, '.volta', 'bin'),
+    path.join(home, '.asdf', 'shims'),
+    path.join(home, '.bun', 'bin'),
+    path.join(home, '.cargo', 'bin'),
+    path.join(home, '.deno', 'bin'),
+    path.join(home, 'bin'),
+  ];
+}
+
+async function nvmNodeBinDirs(deps) {
+  if (typeof deps.readdir !== 'function') return [];
+  const root = path.join(deps.homedir(), '.nvm', 'versions', 'node');
+  try {
+    const entries = await deps.readdir(root);
+    return entries.filter(Boolean).map((entry) => path.join(root, entry, 'bin'));
+  } catch {
+    return [];
+  }
+}
+
+async function commandSearchDirs(deps) {
   const envPath = String(deps.env?.PATH || process.env.PATH || '')
     .split(path.delimiter)
     .filter(Boolean);
-  return [...new Set([...envPath, ...COMMON_COMMAND_DIRS])];
+  const home = deps.homedir();
+  const [nvmDirs] = await Promise.all([nvmNodeBinDirs(deps)]);
+  return [...new Set([
+    ...envPath,
+    ...COMMON_COMMAND_DIRS,
+    ...userManagedBinDirs(home),
+    ...nvmDirs,
+  ])];
 }
 
 function isNotFound(error) {
@@ -88,22 +120,42 @@ async function execTool(deps, command, args = [], extraOptions = {}) {
   return { ok: true, stdout: String(stdout || ''), stderr: String(stderr || '') };
 }
 
-async function runViaLoginShell(deps, command, args = []) {
+async function resolveViaLoginShell(deps, command) {
   if (deps.platform !== 'darwin' || !safeCommandName(command)) return null;
   const shell = '/bin/zsh';
-  const argText = args.map(shellQuote).join(' ');
-  const pathPrefix = commandSearchDirs(deps).join(path.delimiter);
-  const script = `PATH=${shellQuote(pathPrefix)}:$PATH; resolved=$(command -v ${command}) || exit 127; "$resolved" ${argText}`;
+  const dirs = await commandSearchDirs(deps);
+  const pathPrefix = dirs.join(path.delimiter);
+  // `zsh -lc` sources ~/.zprofile but not ~/.zshrc; many macOS users keep nvm,
+  // volta, and asdf init in .zshrc, so source it explicitly. We only ask the
+  // shell to print the resolved absolute path — execution happens via execFile
+  // below so we never hand the shell anything beyond the static command name.
+  const script = `if [ -f "$HOME/.zshrc" ]; then . "$HOME/.zshrc" >/dev/null 2>&1 || true; fi; export PATH=${shellQuote(pathPrefix)}:$PATH; command -v ${command} 2>/dev/null || true`;
   try {
-    return await execTool(deps, shell, ['-lc', script], {
-      env: { ...(deps.env || process.env), PATH: `${pathPrefix}${path.delimiter}${deps.env?.PATH || process.env.PATH || ''}` },
+    const result = await execTool(deps, shell, ['-lc', script], {
+      env: {
+        ...(deps.env || process.env),
+        PATH: `${pathPrefix}${path.delimiter}${deps.env?.PATH || process.env.PATH || ''}`,
+      },
     });
+    const resolved = String(result.stdout || '').trim().split('\n').find(Boolean);
+    if (!resolved || !path.isAbsolute(resolved)) return null;
+    return resolved;
+  } catch {
+    return null;
+  }
+}
+
+async function runViaLoginShell(deps, command, args = []) {
+  const resolved = await resolveViaLoginShell(deps, command);
+  if (!resolved) return null;
+  try {
+    return await execTool(deps, resolved, args);
   } catch (error) {
     return {
       ok: false,
       stdout: String(error.stdout || ''),
       stderr: String(error.stderr || ''),
-      error: isNotFound(error) || error.code === 127 ? 'not found' : String(error.message || error),
+      error: isNotFound(error) ? 'not found' : String(error.message || error),
     };
   }
 }
@@ -121,7 +173,8 @@ async function runCommand(deps, command, args = []) {
 
     if (!isNotFound(error)) return directError;
 
-    for (const dir of commandSearchDirs(deps)) {
+    const dirs = await commandSearchDirs(deps);
+    for (const dir of dirs) {
       const candidate = path.join(dir, command);
       try {
         return await execTool(deps, candidate, args);

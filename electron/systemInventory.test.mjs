@@ -131,6 +131,109 @@ describe('collectLocalInventory', () => {
     expect(inventory.desktopSmoke).toMatchObject({ bridgeExpected: true, platformSupported: true, status: 'ready' });
   });
 
+  it('detects Codex CLI in npm-global bin and Claude Code in nvm node bin when Electron PATH is sparse', async () => {
+    const home = '/Users/brad';
+    const nvmRoot = `${home}/.nvm/versions/node`;
+    const claudePath = `${nvmRoot}/v22.1.0/bin/claude`;
+    const codexPath = `${home}/.npm-global/bin/codex`;
+
+    const commands = {
+      'git --version': ok('git version 2.45.0\n'),
+      '/usr/bin/node --version': ok('v22.1.0\n'),
+      '/usr/bin/npm --version': ok('10.9.4\n'),
+      '/usr/bin/python3 --version': ok('Python 3.12.2\n'),
+      '/usr/bin/curl --version': ok('curl 8.7.1\n'),
+      '/opt/homebrew/bin/gemini --version': ok('0.1.12\n'),
+      [`${claudePath} --version`]: ok('2.1.126 (Claude Code)\n'),
+      [`${codexPath} --version`]: ok('codex-cli 0.128.0\n'),
+      'ss -ltnp': missing,
+      'lsof -nP -iTCP -sTCP:LISTEN': ok(''),
+      'ps -eo pid,comm,args': ok(''),
+    };
+
+    const inventory = await collectLocalInventory({
+      homedir: () => home,
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'macbook',
+      release: () => '24.6.0',
+      env: { PATH: '/usr/bin:/bin' },
+      async execFile(command, args = []) {
+        const key = [command, ...args].join(' ');
+        const result = commands[key];
+        if (result instanceof Error) throw result;
+        if (result) return result;
+        throw missing;
+      },
+      async access() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return '';
+      },
+      async readdir(dir) {
+        if (dir === nvmRoot) return ['v22.1.0', 'v20.19.0'];
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+    });
+
+    expect(inventory.tools.codex).toMatchObject({ available: true, version: 'codex-cli 0.128.0' });
+    expect(inventory.tools.claude).toMatchObject({ available: true, version: '2.1.126 (Claude Code)' });
+    expect(inventory.tools.gemini).toMatchObject({ available: true, version: '0.1.12' });
+    expect(inventory.tools.node).toMatchObject({ available: true, version: 'v22.1.0' });
+  });
+
+  it('falls back to a login zsh to resolve Claude Code when no static dir contains it', async () => {
+    const home = '/Users/brad';
+    const resolvedClaude = `${home}/Library/pnpm/claude`;
+
+    const commands = {
+      'git --version': ok('git version 2.45.0\n'),
+      '/opt/homebrew/bin/node --version': ok('v22.1.0\n'),
+      '/opt/homebrew/bin/npm --version': ok('10.9.4\n'),
+      '/opt/homebrew/bin/python3 --version': ok('Python 3.12.2\n'),
+      '/opt/homebrew/bin/curl --version': ok('curl 8.7.1\n'),
+      '/opt/homebrew/bin/gemini --version': ok('0.1.12\n'),
+      [`${resolvedClaude} --version`]: ok('2.1.126 (Claude Code)\n'),
+      'ss -ltnp': missing,
+      'lsof -nP -iTCP -sTCP:LISTEN': ok(''),
+      'ps -eo pid,comm,args': ok(''),
+    };
+
+    const inventory = await collectLocalInventory({
+      homedir: () => home,
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'macbook',
+      release: () => '24.6.0',
+      env: { PATH: '/usr/bin:/bin' },
+      async execFile(command, args = []) {
+        if (command === '/bin/zsh' && args[0] === '-lc') {
+          const script = String(args[1] || '');
+          if (script.includes('command -v claude')) return ok(`${resolvedClaude}\n`);
+          throw missing;
+        }
+        const key = [command, ...args].join(' ');
+        const result = commands[key];
+        if (result instanceof Error) throw result;
+        if (result) return result;
+        throw missing;
+      },
+      async access() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return '';
+      },
+      async readdir() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+    });
+
+    expect(inventory.tools.claude).toMatchObject({ available: true, version: '2.1.126 (Claude Code)' });
+    expect(inventory.tools.codex).toMatchObject({ available: false, status: 'missing' });
+  });
+
   it('detects macOS CLIs from Homebrew-style fallback paths when Electron PATH is sparse', async () => {
     const commands = {
       'git --version': ok('git version 2.45.0\n'),
