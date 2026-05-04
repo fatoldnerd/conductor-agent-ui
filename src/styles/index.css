@@ -1952,3 +1952,197 @@ a {
   overflow-wrap: anywhere;
   margin: 0 0 14px;
 }
+
+/* ------------------------------------------------------------------
+   Agent Console (read-only)
+------------------------------------------------------------------- */
+
+.agent-console-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.agent-console-grid {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+.agent-console-controls,
+.agent-console-transcript {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 520px;
+}
+.agent-runtime-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agent-runtime-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.022);
+  text-align: left;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.agent-runtime-row:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.agent-runtime-row:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.agent-runtime-row.selected {
+  border-color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+.agent-runtime-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.agent-runtime-main strong {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.agent-runtime-main span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-console-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  outline: none;
+  resize: vertical;
+}
+.agent-console-input:focus {
+  border-color: var(--accent-strong);
+}
+.agent-console-input.prompt {
+  font-family: inherit;
+  min-height: 70px;
+}
+.agent-console-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.agent-console-hint {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.agent-console-hint.ok {
+  color: #87c598;
+}
+.agent-console-hint.error {
+  color: #f0a4a4;
+}
+.agent-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.agent-console-callout {
+  margin-top: auto;
+  margin-bottom: 0;
+}
+.agent-transcript {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.28);
+  overflow-y: auto;
+  min-height: 280px;
+  max-height: 540px;
+}
+.agent-transcript-entry {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-soft);
+}
+.agent-transcript-entry:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.agent-transcript-tag {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-faint);
+  font-weight: 600;
+  padding-top: 1px;
+}
+.agent-transcript-entry.prompt .agent-transcript-tag {
+  color: var(--accent-text);
+}
+.agent-transcript-entry.stderr .agent-transcript-tag,
+.agent-transcript-entry.error .agent-transcript-tag {
+  color: #f0a4a4;
+}
+.agent-transcript-entry.status .agent-transcript-tag,
+.agent-transcript-entry.system .agent-transcript-tag {
+  color: var(--text-muted);
+}
+.agent-transcript-entry pre {
+  margin: 0;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agent-transcript-entry.stderr pre,
+.agent-transcript-entry.error pre {
+  color: #f0c0c0;
+}
+.agent-transcript-entry.system pre,
+.agent-transcript-entry.status pre {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+.agent-prompt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.agent-prompt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.agent-console-error {
+  margin-top: 10px;
+}
+
+@media (max-width: 1180px) {
+  .agent-console-grid {
+    grid-template-columns: 1fr;
+  }
+}

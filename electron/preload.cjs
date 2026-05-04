@@ -20,6 +20,18 @@ const conductorApi = {
       return () => ipcRenderer.removeListener('integrations:installOutput', listener);
     },
   },
+  agents: {
+    listRuntimes: () => ipcRenderer.invoke('agents:listRuntimes'),
+    validateProject: (projectPath) => ipcRenderer.invoke('agents:validateProject', projectPath),
+    startRun: (payload) => ipcRenderer.invoke('agents:startRun', payload),
+    stopRun: (runId) => ipcRenderer.invoke('agents:stopRun', runId),
+    getRun: (runId) => ipcRenderer.invoke('agents:getRun', runId),
+    onRunEvent: (callback) => {
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on('agents:runEvent', listener);
+      return () => ipcRenderer.removeListener('agents:runEvent', listener);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('conductor', conductorApi);

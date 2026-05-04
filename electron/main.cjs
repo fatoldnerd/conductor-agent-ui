@@ -13,6 +13,13 @@ const {
   runInstallStep,
   setAuditLogPath,
 } = require('./installerRunner.cjs');
+const {
+  getAgentRun,
+  listAgentRuntimes,
+  startAgentRun,
+  stopAgentRun,
+  validateProjectPath,
+} = require('./agentRunner.cjs');
 
 const execFileAsync = promisify(execFile);
 const isDev = process.env.VITE_DEV_SERVER_URL || process.env.NODE_ENV === 'development';
@@ -20,6 +27,7 @@ const isDev = process.env.VITE_DEV_SERVER_URL || process.env.NODE_ENV === 'devel
 const PRELOAD_PATH = path.join(__dirname, 'preload.cjs');
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['https:']);
 const runOwners = new Map();
+const agentRunOwners = new Map();
 
 function packagedIndexPath() {
   return path.join(__dirname, '../dist/index.html');
@@ -40,6 +48,13 @@ function assertRunOwner(event, runId) {
   assertTrustedSender(event);
   const owner = runOwners.get(runId);
   if (owner && owner !== event.sender.id) throw new Error('Install run belongs to another window');
+}
+
+function assertAgentRunOwner(event, runId) {
+  assertTrustedSender(event);
+  const owner = agentRunOwners.get(runId);
+  if (!owner) throw new Error(`Unknown agent run: ${runId}`);
+  if (owner !== event.sender.id) throw new Error('Agent run belongs to another window');
 }
 
 function createWindow() {
@@ -231,6 +246,51 @@ ipcMain.handle('integrations:listAuditEvents', async (event, runId) => {
   if (runId) assertRunOwner(event, runId);
   else assertTrustedSender(event);
   return listAuditEvents(runId);
+});
+
+ipcMain.handle('agents:listRuntimes', async (event) => {
+  assertTrustedSender(event);
+  return listAgentRuntimes();
+});
+
+ipcMain.handle('agents:validateProject', async (event, projectPath) => {
+  assertTrustedSender(event);
+  try {
+    const normalized = validateProjectPath(projectPath);
+    return { valid: true, projectPath: normalized };
+  } catch (error) {
+    return { valid: false, error: String(error && error.message || error) };
+  }
+});
+
+ipcMain.handle('agents:startRun', async (event, payload) => {
+  assertTrustedSender(event);
+  if (!payload || typeof payload !== 'object') throw new Error('Agent run payload must be an object');
+  const safe = {
+    runtimeId: payload.runtimeId,
+    projectPath: payload.projectPath,
+    prompt: payload.prompt,
+    mode: payload.mode,
+  };
+  const senderId = event.sender.id;
+  const result = startAgentRun(safe, {
+    onEvent: (eventPayload) => {
+      if (event.sender.isDestroyed && event.sender.isDestroyed()) return;
+      event.sender.send('agents:runEvent', eventPayload);
+    },
+  });
+  agentRunOwners.set(result.runId, senderId);
+  return result;
+});
+
+ipcMain.handle('agents:stopRun', async (event, runId) => {
+  assertAgentRunOwner(event, runId);
+  return stopAgentRun(runId);
+});
+
+ipcMain.handle('agents:getRun', async (event, runId) => {
+  assertAgentRunOwner(event, runId);
+  return getAgentRun(runId);
 });
 
 app.whenReady().then(() => {

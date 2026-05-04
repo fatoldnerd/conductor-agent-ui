@@ -120,6 +120,65 @@ export type IntegrationAuditEvent = {
   [key: string]: unknown;
 };
 
+export type AgentRuntimeId = 'claude-code' | 'codex-cli' | 'gemini-cli';
+export type AgentRunMode = 'read-only';
+
+export type AgentRuntimeDescriptor = {
+  id: AgentRuntimeId;
+  label: string;
+  description: string;
+  command: string;
+  supportedModes: AgentRunMode[];
+  notes: string[];
+  needsValidation: boolean;
+};
+
+export type AgentRunStatus =
+  | 'starting'
+  | 'running'
+  | 'cancelling'
+  | 'cancelled'
+  | 'succeeded'
+  | 'failed';
+
+export type AgentRunSnapshot = {
+  runId: string;
+  runtimeId: AgentRuntimeId;
+  command: string;
+  args: string[];
+  cwd: string;
+  mode: AgentRunMode;
+  status: AgentRunStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  exitCode: number | null;
+  bytesEmitted: number;
+};
+
+export type AgentStartPayload = {
+  runtimeId: AgentRuntimeId;
+  projectPath: string;
+  prompt: string;
+  mode: AgentRunMode;
+};
+
+export type AgentRunEvent =
+  | { runId: string; type: 'stdout' | 'stderr'; chunk: string }
+  | { runId: string; type: 'error'; message: string }
+  | {
+      runId: string;
+      type: 'status';
+      status: AgentRunStatus;
+      exitCode?: number | null;
+      signal?: string | null;
+      startedAt?: string;
+      finishedAt?: string;
+    };
+
+export type AgentProjectValidation =
+  | { valid: true; projectPath: string }
+  | { valid: false; error: string };
+
 declare global {
   interface Window {
     conductor?: {
@@ -137,6 +196,14 @@ declare global {
         runInstallSequence: (runId: string) => Promise<IntegrationInstallRun>;
         listAuditEvents: (runId?: string) => Promise<IntegrationAuditEvent[]>;
         onInstallOutput: (callback: (payload: { runId: string; stepId?: string; chunk: string }) => void) => () => void;
+      };
+      agents: {
+        listRuntimes: () => Promise<AgentRuntimeDescriptor[]>;
+        validateProject: (projectPath: string) => Promise<AgentProjectValidation>;
+        startRun: (payload: AgentStartPayload) => Promise<{ runId: string; snapshot: AgentRunSnapshot }>;
+        stopRun: (runId: string) => Promise<AgentRunSnapshot>;
+        getRun: (runId: string) => Promise<AgentRunSnapshot>;
+        onRunEvent: (callback: (event: AgentRunEvent) => void) => () => void;
       };
     };
   }
