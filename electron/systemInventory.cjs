@@ -274,7 +274,7 @@ function serviceStatus(id, label, running, detail = {}) {
     id,
     label,
     running,
-    status: running ? 'running' : 'stopped',
+    status: detail.status || (running ? 'running' : 'stopped'),
     ...detail,
   };
 }
@@ -294,6 +294,61 @@ function hasPort(output, port) {
   return new RegExp(`[:.]${port}\\b`).test(String(output || ''));
 }
 
+function processLineForPid(processOutput, pid) {
+  if (!pid) return '';
+  return String(processOutput || '').split(/\r?\n/).find((line) => new RegExp(`^\\s*${pid}\\b`).test(line)) || '';
+}
+
+function listenerForPort(output, port) {
+  const lines = String(output || '').split(/\r?\n/).filter((line) => hasPort(line, port));
+  for (const line of lines) {
+    const ssMatch = line.match(/users:\(\("([^"]+)",pid=(\d+)/);
+    if (ssMatch) return { ownerCommand: ssMatch[1], pid: ssMatch[2] };
+
+    const parts = line.trim().split(/\s+/);
+    if (parts.length >= 2 && parts[0] && parts[0].toUpperCase() !== 'COMMAND') {
+      return { ownerCommand: parts[0], pid: /^\d+$/.test(parts[1]) ? parts[1] : null };
+    }
+  }
+  return null;
+}
+
+function commandLooksLikeSsh(command, processLine = '') {
+  const commandName = String(command || '').toLowerCase();
+  const line = String(processLine || '').toLowerCase();
+  return commandName === 'ssh' || commandName.endsWith('/ssh') || /\bssh\b/.test(line);
+}
+
+function commandLooksHermesCompatible(command, processLine, serviceNeedles) {
+  const haystack = `${command || ''}\n${processLine || ''}`.toLowerCase();
+  return includesAny(haystack, ['hermes', ...serviceNeedles]);
+}
+
+function hermesPortServiceStatus({ id, label, port, portOutput, processOutput, serviceNeedles }) {
+  const listener = listenerForPort(portOutput, port);
+  const ownerProcessLine = listener ? processLineForPid(processOutput, listener.pid) : '';
+  const processEvidence = includesAny(processOutput, serviceNeedles);
+  const ownerIsHermes = listener && commandLooksHermesCompatible(listener.ownerCommand, ownerProcessLine, serviceNeedles);
+
+  if (ownerIsHermes || (!listener && processEvidence)) {
+    return serviceStatus(id, label, true, { port, detection: 'hermes_process' });
+  }
+
+  if (listener) {
+    const ownerKind = commandLooksLikeSsh(listener.ownerCommand, ownerProcessLine) ? 'ssh_tunnel' : 'other_process';
+    return serviceStatus(id, label, false, {
+      port,
+      status: 'port_in_use',
+      portState: ownerKind,
+      detail: ownerKind === 'ssh_tunnel'
+        ? 'Port is in use by an SSH tunnel, not a confirmed local Hermes service.'
+        : 'Port is in use, but the owning process was not identified as Hermes.',
+    });
+  }
+
+  return serviceStatus(id, label, false, { port });
+}
+
 async function collectServiceStatus(deps) {
   const [ports, processes] = await Promise.all([
     collectPortSnapshot(deps),
@@ -308,8 +363,22 @@ async function collectServiceStatus(deps) {
   return {
     services: {
       hermesGateway: serviceStatus('hermesGateway', 'Hermes gateway', hasProcess('hermes gateway run', 'hermes_cli.main gateway'), {}),
-      hermesDashboard: serviceStatus('hermesDashboard', 'Hermes dashboard', hasPort(portOutput, 9119) || hasProcess('hermes dashboard'), { port: 9119 }),
-      hermesApi: serviceStatus('hermesApi', 'Hermes API server', hasPort(portOutput, 8642) || hasProcess('api-server', 'api_server'), { port: 8642 }),
+      hermesDashboard: hermesPortServiceStatus({
+        id: 'hermesDashboard',
+        label: 'Hermes dashboard',
+        port: 9119,
+        portOutput,
+        processOutput,
+        serviceNeedles: ['hermes dashboard'],
+      }),
+      hermesApi: hermesPortServiceStatus({
+        id: 'hermesApi',
+        label: 'Hermes API server',
+        port: 8642,
+        portOutput,
+        processOutput,
+        serviceNeedles: ['api-server', 'api_server'],
+      }),
       openclaw: serviceStatus('openclaw', 'OpenClaw runtime', openClawRunning, {}),
     },
     agents: {},

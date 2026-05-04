@@ -1,13 +1,8 @@
 import type { AgentRuntimeDescriptor, AgentRuntimeId, LocalInventory } from './electron';
-
-const RUNTIME_INVENTORY_KEY: Record<AgentRuntimeId, string> = {
-  'claude-code': 'claude',
-  'codex-cli': 'codex',
-  'gemini-cli': 'gemini',
-};
+import { RUNTIME_INVENTORY_KEYS } from './runtimeReadiness';
 
 export function runtimeInventoryKey(runtimeId: AgentRuntimeId): string {
-  return RUNTIME_INVENTORY_KEY[runtimeId];
+  return RUNTIME_INVENTORY_KEYS[runtimeId];
 }
 
 export function runtimeAvailable(runtime: AgentRuntimeDescriptor, inventory: LocalInventory | null): boolean {

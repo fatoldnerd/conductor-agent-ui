@@ -30,8 +30,11 @@ export type InventoryServiceStatus = {
   id: string;
   label: string;
   running: boolean;
-  status: 'running' | 'stopped';
+  status: 'running' | 'stopped' | 'port_in_use';
   port?: number;
+  portState?: 'ssh_tunnel' | 'other_process';
+  detection?: 'hermes_process' | string;
+  detail?: string;
 };
 
 export type InventoryAgentStatus = {

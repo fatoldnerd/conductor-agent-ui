@@ -131,6 +131,170 @@ describe('collectLocalInventory', () => {
     expect(inventory.desktopSmoke).toMatchObject({ bridgeExpected: true, platformSupported: true, status: 'ready' });
   });
 
+  it('does not mark SSH-owned Hermes ports as running services', async () => {
+    const commands = {
+      'git --version': ok('git version 2.45.0\n'),
+      'node --version': ok('v22.1.0\n'),
+      'npm --version': ok('10.9.4\n'),
+      'pnpm --version': missing,
+      'python3 --version': ok('Python 3.12.2\n'),
+      'curl --version': ok('curl 8.7.1\n'),
+      'tmux -V': missing,
+      'hermes --version': missing,
+      'openclaw --version': missing,
+      'claude --version': missing,
+      'codex --version': missing,
+      'gemini --version': missing,
+      'vercel --version': missing,
+      'netlify --version': missing,
+      'ss -ltnp': Object.assign(new Error('ss missing on macOS'), { code: 'ENOENT' }),
+      'lsof -nP -iTCP -sTCP:LISTEN': ok(
+        'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n' +
+        'ssh 700 user 12u IPv4 0x1 0t0 TCP 127.0.0.1:9119 (LISTEN)\n' +
+        'ssh 700 user 13u IPv4 0x2 0t0 TCP 127.0.0.1:8642 (LISTEN)\n',
+      ),
+      'ps -eo pid,comm,args': ok('700 ssh -N -L [redacted]\n'),
+    };
+
+    const inventory = await collectLocalInventory({
+      homedir: () => '/Users/user',
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'mac',
+      release: () => '24.6.0',
+      async execFile(command, args = []) {
+        const key = [command, ...args].join(' ');
+        const result = commands[key];
+        if (result instanceof Error) throw result;
+        if (result) return result;
+        throw missing;
+      },
+      async access() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return '';
+      },
+    });
+
+    expect(inventory.services.hermesDashboard).toMatchObject({
+      running: false,
+      status: 'port_in_use',
+      port: 9119,
+      portState: 'ssh_tunnel',
+    });
+    expect(inventory.services.hermesApi).toMatchObject({
+      running: false,
+      status: 'port_in_use',
+      port: 8642,
+      portState: 'ssh_tunnel',
+    });
+    expect(JSON.stringify(inventory.services)).not.toContain('-L');
+  });
+
+  it('marks Hermes ports running only when listener owner is Hermes-compatible', async () => {
+    const commands = {
+      'git --version': ok('git version 2.45.0\n'),
+      'node --version': ok('v22.1.0\n'),
+      'npm --version': ok('10.9.4\n'),
+      'pnpm --version': missing,
+      'python3 --version': ok('Python 3.12.2\n'),
+      'curl --version': ok('curl 8.7.1\n'),
+      'tmux -V': missing,
+      'hermes --version': ok('Hermes Agent v0.12.0\n'),
+      'openclaw --version': missing,
+      'claude --version': missing,
+      'codex --version': missing,
+      'gemini --version': missing,
+      'vercel --version': missing,
+      'netlify --version': missing,
+      'ss -ltnp': Object.assign(new Error('ss missing on macOS'), { code: 'ENOENT' }),
+      'lsof -nP -iTCP -sTCP:LISTEN': ok(
+        'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n' +
+        'python 810 user 12u IPv4 0x1 0t0 TCP 127.0.0.1:9119 (LISTEN)\n' +
+        'python 811 user 13u IPv4 0x2 0t0 TCP 127.0.0.1:8642 (LISTEN)\n',
+      ),
+      'ps -eo pid,comm,args': ok(
+        '810 python -m hermes dashboard\n' +
+        '811 python -m hermes api-server\n',
+      ),
+    };
+
+    const inventory = await collectLocalInventory({
+      homedir: () => '/Users/user',
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'mac',
+      release: () => '24.6.0',
+      async execFile(command, args = []) {
+        const key = [command, ...args].join(' ');
+        const result = commands[key];
+        if (result instanceof Error) throw result;
+        if (result) return result;
+        throw missing;
+      },
+      async access() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return '';
+      },
+    });
+
+    expect(inventory.services.hermesDashboard).toMatchObject({ running: true, status: 'running', port: 9119 });
+    expect(inventory.services.hermesApi).toMatchObject({ running: true, status: 'running', port: 8642 });
+  });
+
+  it('represents non-Hermes listeners on Hermes ports as generic port-in-use', async () => {
+    const commands = {
+      'git --version': ok('git version 2.45.0\n'),
+      'node --version': ok('v22.1.0\n'),
+      'npm --version': ok('10.9.4\n'),
+      'pnpm --version': missing,
+      'python3 --version': ok('Python 3.12.2\n'),
+      'curl --version': ok('curl 8.7.1\n'),
+      'tmux -V': missing,
+      'hermes --version': missing,
+      'openclaw --version': missing,
+      'claude --version': missing,
+      'codex --version': missing,
+      'gemini --version': missing,
+      'vercel --version': missing,
+      'netlify --version': missing,
+      'ss -ltnp': Object.assign(new Error('ss missing on macOS'), { code: 'ENOENT' }),
+      'lsof -nP -iTCP -sTCP:LISTEN': ok('node 900 user 12u IPv4 0x1 0t0 TCP 127.0.0.1:8642 (LISTEN)\n'),
+      'ps -eo pid,comm,args': ok('900 node local-dev-server.js\n'),
+    };
+
+    const inventory = await collectLocalInventory({
+      homedir: () => '/Users/user',
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'mac',
+      release: () => '24.6.0',
+      async execFile(command, args = []) {
+        const key = [command, ...args].join(' ');
+        const result = commands[key];
+        if (result instanceof Error) throw result;
+        if (result) return result;
+        throw missing;
+      },
+      async access() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return '';
+      },
+    });
+
+    expect(inventory.services.hermesApi).toMatchObject({
+      running: false,
+      status: 'port_in_use',
+      port: 8642,
+      portState: 'other_process',
+    });
+  });
+
   it('detects Codex CLI in npm-global bin and Claude Code in nvm node bin when Electron PATH is sparse', async () => {
     const home = '/Users/brad';
     const nvmRoot = `${home}/.nvm/versions/node`;

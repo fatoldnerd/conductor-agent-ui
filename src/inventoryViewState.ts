@@ -27,6 +27,7 @@ export function inventorySummaryText(categories: LocalToolCategory[]): string {
   const parts = [
     `${summary.installed} ready`,
     `${summary.needsConfig} need config`,
+    `${summary.needsCredentials} need credentials`,
     `${summary.missing} missing/stopped`,
   ];
   if (summary.notScanned > 0) parts.push(`${summary.notScanned} not scanned`);
@@ -100,7 +101,7 @@ export function deriveInventoryViewState({
 
   const summary = localToolSummary(categories);
   const summaryText = inventorySummaryText(categories);
-  if (summary.installed === 0 && summary.needsConfig === 0) {
+  if (summary.installed === 0 && summary.needsConfig === 0 && summary.needsCredentials === 0) {
     return {
       kind: 'no_tools_detected',
       eyebrow: 'No local tools detected',
@@ -119,6 +120,19 @@ export function deriveInventoryViewState({
       eyebrow: 'Configuration needed',
       title: 'Some detected runtimes need local configuration',
       body: 'Conductor found installed runtime tooling, but one or more known config files were not detected. Review the affected rows and use the configure preview for the relevant runtime.',
+      primaryAction: 'Refresh inventory',
+      hint: summaryText,
+      canRetry: true,
+      summaryText,
+    };
+  }
+
+  if (summary.needsCredentials > 0) {
+    return {
+      kind: 'needs_config',
+      eyebrow: 'Credentials needed',
+      title: 'Some detected runtimes need local credentials',
+      body: 'Conductor found runtime configuration, but expected credential markers were not detected. Review the affected rows and configure credentials outside the renderer.',
       primaryAction: 'Refresh inventory',
       hint: summaryText,
       canRetry: true,

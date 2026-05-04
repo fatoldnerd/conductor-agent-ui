@@ -78,12 +78,29 @@ describe('local tool inventory view model', () => {
   it('marks installed runtimes with missing known config as needing attention', () => {
     const runtimes = buildLocalToolCategories(inventory).find((category) => category.id === 'agent-runtimes')?.items ?? [];
     const hermes = runtimes.find((item) => item.id === 'hermes');
-    const codex = runtimes.find((item) => item.id === 'codex');
+    const codex = runtimes.find((item) => item.id === 'codex-cli');
 
     expect(hermes).toMatchObject({ readiness: 'needs_config', recipeId: 'hermes-agent' });
-    expect(codex).toMatchObject({ readiness: 'installed', recipeId: 'codex-cli' });
+    expect(codex).toMatchObject({ readiness: 'ready', recipeId: 'codex-cli' });
     expect(hermes?.actions.map((action) => action.kind)).toContain('preview_install');
     expect(hermes?.actions.map((action) => action.kind)).toContain('health_check');
+  });
+
+  it('distinguishes config-needed from credential-needed runtime state', () => {
+    const configuredInventory: LocalInventory = {
+      ...inventory,
+      configs: {
+        ...inventory.configs,
+        hermesConfig: { id: 'hermesConfig', path: '/home/user/.hermes/config.yaml', exists: true, status: 'found' },
+        hermesEnv: { id: 'hermesEnv', path: '/home/user/.hermes/.env', exists: true, status: 'found', secrets: {} },
+      },
+    };
+    const runtimes = buildLocalToolCategories(configuredInventory).find((category) => category.id === 'agent-runtimes')?.items ?? [];
+
+    expect(runtimes.find((item) => item.id === 'hermes')).toMatchObject({
+      readiness: 'needs_credentials',
+      diagnosis: expect.stringContaining('credential markers'),
+    });
   });
 
   it('represents unscanned fallback tools as not scanned rather than missing', () => {

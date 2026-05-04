@@ -586,9 +586,13 @@ function HealthPreview({ checks }: { checks: LocalToolItem['healthChecks'] }) {
 
 function readinessLabel(readiness: LocalToolItem['readiness']) {
   const labels: Record<LocalToolItem['readiness'], string> = {
+    ready: 'Ready',
     installed: 'Installed',
     missing: 'Missing',
     needs_config: 'Needs config',
+    needs_credentials: 'Needs credentials',
+    broken: 'Broken',
+    unsupported: 'Unsupported',
     running: 'Running',
     stopped: 'Stopped',
     not_scanned: 'Not scanned',
@@ -597,15 +601,16 @@ function readinessLabel(readiness: LocalToolItem['readiness']) {
 }
 
 function statusDotClass(readiness: LocalToolItem['readiness']) {
-  if (readiness === 'installed' || readiness === 'running') return 'ok';
-  if (readiness === 'needs_config') return 'warn';
+  if (readiness === 'ready' || readiness === 'installed' || readiness === 'running') return 'ok';
+  if (readiness === 'needs_config' || readiness === 'needs_credentials') return 'warn';
+  if (readiness === 'broken') return 'missing';
   if (readiness === 'not_scanned') return '';
   return 'missing';
 }
 
 function statusChipClass(readiness: LocalToolItem['readiness']) {
-  if (readiness === 'installed' || readiness === 'running') return 'chip-ok';
-  if (readiness === 'needs_config') return 'chip-warn';
+  if (readiness === 'ready' || readiness === 'installed' || readiness === 'running') return 'chip-ok';
+  if (readiness === 'needs_config' || readiness === 'needs_credentials') return 'chip-warn';
   return 'chip-muted';
 }
 
@@ -615,6 +620,7 @@ function selectedActionLabel(action: LocalToolAction['kind']) {
     configure: 'Configuration preview',
     health_check: 'Health check preview',
     open_docs: 'Documentation',
+    copy_install_command: 'Copy install command',
     refresh: 'Inventory refresh',
     coming_soon: 'Coming soon',
     requires_desktop: 'Requires desktop',
@@ -913,10 +919,10 @@ function DiagnosticsView() {
               <span className={`status-dot ${service.running ? 'ok' : 'missing'}`} />
               <div>
                 <strong>{service.label}</strong>
-                <span>{service.port ? `Expected port ${service.port}` : 'Process detection'}</span>
+                <span>{service.detail ?? (service.port ? `Expected port ${service.port}` : 'Process detection')}</span>
               </div>
-              <span className={`chip ${service.running ? 'chip-ok' : 'chip-muted'}`}>
-                {service.running ? 'Running' : 'Stopped'}
+              <span className={`chip ${service.running ? 'chip-ok' : service.status === 'port_in_use' ? 'chip-warn' : 'chip-muted'}`}>
+                {service.running ? 'Running' : service.status === 'port_in_use' ? 'Port in use' : 'Stopped'}
               </span>
             </div>
           ))}
