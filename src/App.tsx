@@ -548,9 +548,44 @@ function LocalToolSection({
                 </button>
               ))}
             </div>
+            {tool.detailPanel && <RuntimeDetailPanel tool={tool} />}
           </div>
         ))}
         {!category.items.length && <p className="empty-state">No local services detected yet. Refresh inventory from the desktop app.</p>}
+      </div>
+    </div>
+  );
+}
+
+function RuntimeDetailPanel({ tool }: { tool: LocalToolItem }) {
+  const panel = tool.detailPanel;
+  if (!panel) return null;
+
+  return (
+    <div className="runtime-detail-panel">
+      <div className="runtime-detail-head">
+        <div>
+          <strong>{panel.title}</strong>
+          <span>{panel.summary}</span>
+        </div>
+        {tool.primaryAction && (
+          <span className="chip chip-muted" title={tool.primaryAction.description}>
+            {tool.primaryAction.label}
+          </span>
+        )}
+      </div>
+      <div className="runtime-detail-grid">
+        {panel.rows.map((row) => (
+          <div className="runtime-detail-row" key={`${tool.id}-${row.label}`}>
+            <span>{row.label}</span>
+            <strong className={row.tone ? `runtime-detail-${row.tone}` : undefined}>{row.value}</strong>
+          </div>
+        ))}
+      </div>
+      <div className="runtime-detail-next">
+        {panel.nextSteps.map((step) => (
+          <span key={step}>{step}</span>
+        ))}
       </div>
     </div>
   );

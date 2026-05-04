@@ -62,6 +62,10 @@ const inventory: LocalInventory = {
 };
 
 describe('local tool inventory view model', () => {
+  function runtimeItems(source: LocalInventory | null) {
+    return buildLocalToolCategories(source).find((category) => category.id === 'agent-runtimes')?.items ?? [];
+  }
+
   it('groups runtimes, prerequisites, deployment tools, and services', () => {
     const categories = buildLocalToolCategories(inventory);
 
@@ -156,13 +160,167 @@ describe('local tool inventory view model', () => {
         hermesEnv: { id: 'hermesEnv', path: '/home/user/.hermes/.env', exists: true, status: 'found', secrets: {} },
       },
     };
-    const runtimes = buildLocalToolCategories(configuredInventory).find((category) => category.id === 'agent-runtimes')?.items ?? [];
+    const runtimes = runtimeItems(configuredInventory);
 
     expect(runtimes.find((item) => item.id === 'hermes')).toMatchObject({
       readiness: 'needs_credentials',
       diagnosis: expect.stringContaining('credential markers'),
       supportHint: expect.stringContaining('Credential markers were not detected'),
       primaryAction: expect.objectContaining({ kind: 'configure', executesCommand: false }),
+    });
+  });
+
+  it('builds runtime-specific detail panels for all canonical runtimes from sanitized inventory', () => {
+    const runtimeInventory: LocalInventory = {
+      ...inventory,
+      tools: {
+        claude: tool('claude', {
+          label: 'Claude Code',
+          command: 'claude',
+          category: 'agent-runtime',
+          recipeId: 'claude-code',
+          available: true,
+          status: 'ready',
+          version: '2.1.126 (Claude Code)',
+        }),
+        codex: tool('codex', {
+          label: 'Codex CLI',
+          command: 'codex',
+          category: 'agent-runtime',
+          recipeId: 'codex-cli',
+          available: true,
+          status: 'ready',
+          version: 'codex-cli 0.125.0',
+        }),
+        gemini: tool('gemini', {
+          label: 'Gemini CLI',
+          command: 'gemini',
+          category: 'agent-runtime',
+          recipeId: 'gemini-cli',
+          available: true,
+          status: 'ready',
+          version: '0.1.7',
+        }),
+        hermes: tool('hermes', {
+          label: 'Hermes Agent',
+          command: 'hermes',
+          category: 'agent-runtime',
+          recipeId: 'hermes-agent',
+          available: true,
+          status: 'ready',
+          version: 'Hermes 1.0.0',
+        }),
+        openclaw: tool('openclaw', {
+          label: 'OpenClaw',
+          command: 'openclaw',
+          category: 'agent-runtime',
+          recipeId: 'openclaw',
+          available: true,
+          status: 'ready',
+          version: null,
+        }),
+      },
+      configs: {
+        hermesConfig: { id: 'hermesConfig', path: '/home/user/.hermes/config.yaml', exists: true, status: 'found' },
+        hermesEnv: { id: 'hermesEnv', path: '/home/user/.hermes/.env', exists: true, status: 'found', secrets: { OPENAI_API_KEY: true } },
+        openclawConfig: { id: 'openclawConfig', path: '/home/user/.openclaw/config.yaml', exists: false, status: 'missing' },
+      },
+      services: {
+        hermesGateway: { id: 'hermesGateway', label: 'Hermes gateway', running: true, status: 'running' },
+        hermesDashboard: { id: 'hermesDashboard', label: 'Hermes dashboard', running: false, status: 'stopped', port: 9119 },
+        hermesApi: {
+          id: 'hermesApi',
+          label: 'Hermes API server',
+          running: false,
+          status: 'port_in_use',
+          port: 8642,
+          portState: 'ssh_tunnel',
+          detail: 'Port is in use by an SSH tunnel, not a confirmed local Hermes service.',
+        },
+        openclaw: { id: 'openclaw', label: 'OpenClaw runtime', running: false, status: 'stopped' },
+      },
+    };
+    const runtimes = runtimeItems(runtimeInventory);
+
+    expect(runtimes.map((item) => item.detailPanel?.title)).toEqual([
+      'Claude Code runtime details',
+      'Codex CLI runtime details',
+      'Gemini CLI runtime details',
+      'Hermes runtime details',
+      'OpenClaw runtime details',
+    ]);
+    expect(runtimes.find((item) => item.id === 'claude-code')?.detailPanel?.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Version', value: '2.1.126 (Claude Code)' }),
+      expect.objectContaining({ label: 'Next safe action', value: expect.stringContaining('preview only') }),
+    ]));
+    expect(runtimes.find((item) => item.id === 'hermes')?.detailPanel?.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Hermes gateway', value: 'Running process detected', tone: 'ok' }),
+      expect.objectContaining({ label: 'Hermes API server', value: 'Port is in use by an SSH tunnel, not a confirmed local Hermes service.', tone: 'warn' }),
+    ]));
+    expect(runtimes.find((item) => item.id === 'openclaw')?.detailPanel?.summary).toContain('needs config');
+  });
+
+  it('keeps runtime detail states distinct without inventing local state', () => {
+    const brokenInventory: LocalInventory = {
+      ...inventory,
+      tools: {
+        claude: tool('claude', {
+          label: 'Claude Code',
+          command: 'claude',
+          category: 'agent-runtime',
+          recipeId: 'claude-code',
+          available: false,
+          status: 'ready',
+          error: 'version check failed',
+        }),
+        codex: tool('codex', {
+          label: 'Codex CLI',
+          command: 'codex',
+          category: 'agent-runtime',
+          recipeId: 'codex-cli',
+          available: false,
+          status: 'missing',
+          error: 'not found',
+        }),
+        hermes: tool('hermes', {
+          label: 'Hermes Agent',
+          command: 'hermes',
+          category: 'agent-runtime',
+          recipeId: 'hermes-agent',
+          available: true,
+          status: 'ready',
+          version: 'Hermes 1.0.0',
+        }),
+      },
+      configs: {
+        hermesConfig: { id: 'hermesConfig', path: '/home/user/.hermes/config.yaml', exists: true, status: 'found' },
+        hermesEnv: { id: 'hermesEnv', path: '/home/user/.hermes/.env', exists: true, status: 'found', secrets: {} },
+      },
+      services: {},
+    };
+
+    const brokenRuntimes = runtimeItems(brokenInventory);
+    expect(brokenRuntimes.find((item) => item.id === 'claude-code')?.detailPanel).toMatchObject({
+      summary: expect.stringContaining('broken'),
+      nextSteps: [expect.stringContaining('sanitized error detail')],
+    });
+    expect(brokenRuntimes.find((item) => item.id === 'codex-cli')?.detailPanel).toMatchObject({
+      summary: expect.stringContaining('missing'),
+      nextSteps: [expect.stringContaining('Install Codex CLI')],
+    });
+    expect(brokenRuntimes.find((item) => item.id === 'gemini-cli')?.detailPanel).toMatchObject({
+      summary: expect.stringContaining('not scanned'),
+      nextSteps: [expect.stringContaining('Refresh inventory')],
+    });
+    expect(brokenRuntimes.find((item) => item.id === 'hermes')?.detailPanel).toMatchObject({
+      summary: expect.stringContaining('needs credentials'),
+      nextSteps: [expect.stringContaining('credentials')],
+    });
+
+    const unconfiguredHermes = runtimeItems(inventory).find((item) => item.id === 'hermes');
+    expect(unconfiguredHermes?.detailPanel).toMatchObject({
+      summary: expect.stringContaining('needs config'),
+      nextSteps: [expect.stringContaining('configuration guidance')],
     });
   });
 

@@ -5,6 +5,7 @@ import {
   RUNTIME_CATEGORY_LABELS,
   RUNTIME_INVENTORY_KEYS,
   readinessDiagnosis,
+  readinessLabel,
   safeAction,
   type CanonicalRuntimeId,
   type RuntimeActionKind,
@@ -21,6 +22,19 @@ export type LocalToolAction = RuntimeActionMetadata & {
   docsUrl?: string;
   disabled?: boolean;
   title?: string;
+};
+
+export type LocalRuntimeDetailRow = {
+  label: string;
+  value: string;
+  tone?: 'ok' | 'warn' | 'muted' | 'danger';
+};
+
+export type LocalRuntimeDetailPanel = {
+  title: string;
+  summary: string;
+  rows: LocalRuntimeDetailRow[];
+  nextSteps: string[];
 };
 
 export type LocalToolItem = {
@@ -40,6 +54,7 @@ export type LocalToolItem = {
   healthChecks: IntegrationHealthCheck[];
   config?: InventoryConfigStatus;
   service?: InventoryServiceStatus;
+  detailPanel?: LocalRuntimeDetailPanel;
   actions: LocalToolAction[];
 };
 
@@ -85,6 +100,37 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 const RUNTIME_DESCRIPTIONS: Record<string, string> = {
   openclaw: 'Open-source agentic development environment and orchestration layer for coding agents.',
   hermes: 'Provider-agnostic agent framework with skills, memory, gateway integrations, cron jobs, and dashboard support.',
+};
+const RUNTIME_DETAIL_COPY: Record<CanonicalRuntimeId, { title: string; evidenceLabel: string; missingStep: string }> = {
+  'claude-code': {
+    title: 'Claude Code runtime details',
+    evidenceLabel: 'Claude CLI evidence',
+    missingStep: 'Install Claude Code or refresh inventory after making it available on PATH.',
+  },
+  'codex-cli': {
+    title: 'Codex CLI runtime details',
+    evidenceLabel: 'Codex CLI evidence',
+    missingStep: 'Install Codex CLI or refresh inventory after making it available on PATH.',
+  },
+  'gemini-cli': {
+    title: 'Gemini CLI runtime details',
+    evidenceLabel: 'Gemini CLI evidence',
+    missingStep: 'Install Gemini CLI or refresh inventory after making it available on PATH.',
+  },
+  hermes: {
+    title: 'Hermes runtime details',
+    evidenceLabel: 'Hermes CLI evidence',
+    missingStep: 'Preview the Hermes setup recipe, then configure Hermes outside the renderer.',
+  },
+  openclaw: {
+    title: 'OpenClaw runtime details',
+    evidenceLabel: 'OpenClaw CLI evidence',
+    missingStep: 'Preview the OpenClaw setup recipe, then refresh inventory after setup.',
+  },
+};
+const RUNTIME_SERVICE_IDS: Partial<Record<CanonicalRuntimeId, string[]>> = {
+  hermes: ['hermesGateway', 'hermesDashboard', 'hermesApi'],
+  openclaw: ['openclaw'],
 };
 const CATEGORY_LABELS: Record<LocalToolCategoryId, string> = {
   'agent-runtimes': RUNTIME_CATEGORY_LABELS['agent-runtime'],
@@ -186,6 +232,85 @@ function runtimeSupportHint(recipe?: IntegrationRecipe, config?: InventoryConfig
   return undefined;
 }
 
+function readinessNextStep(readiness: LocalToolReadiness, runtimeId: CanonicalRuntimeId, action?: LocalToolAction): string {
+  if (readiness === 'ready' || readiness === 'installed' || readiness === 'running') {
+    return action
+      ? `${action.label}: ${action.description}`
+      : 'Use Conductor only after a trusted desktop inventory scan confirms this runtime.';
+  }
+  if (readiness === 'not_scanned') return 'Refresh inventory from the desktop app before treating this runtime as installed or missing.';
+  if (readiness === 'needs_config') return 'Open configuration guidance and complete setup outside the renderer.';
+  if (readiness === 'needs_credentials') return 'Add required credentials in the runtime-owned config path, then refresh inventory.';
+  if (readiness === 'broken') return 'Inspect the sanitized error detail and rerun the desktop inventory scan after fixing the runtime.';
+  if (readiness === 'unsupported') return 'Use this runtime only on a supported desktop platform.';
+  if (readiness === 'stopped') return 'Start the local service outside Conductor or use an approved future service action.';
+  return RUNTIME_DETAIL_COPY[runtimeId].missingStep;
+}
+
+function serviceDetailValue(service: InventoryServiceStatus): string {
+  if (service.status === 'port_in_use') {
+    if (service.portState === 'ssh_tunnel') return service.detail ?? 'Port is in use by an SSH tunnel, not a confirmed local service.';
+    return service.detail ?? 'Port is in use by another process, not a confirmed local service.';
+  }
+  if (service.running) return service.port ? `Running on expected local port ${service.port}` : 'Running process detected';
+  return service.port ? `Stopped; expected local port ${service.port} is not confirmed running` : 'Stopped';
+}
+
+function serviceTone(service: InventoryServiceStatus): LocalRuntimeDetailRow['tone'] {
+  if (service.running) return 'ok';
+  if (service.status === 'port_in_use') return 'warn';
+  return 'muted';
+}
+
+function buildRuntimeDetailPanel(
+  inventory: LocalInventory | null,
+  id: CanonicalRuntimeId,
+  tool: InventoryToolStatus,
+  readiness: LocalToolReadiness,
+  action: LocalToolAction | undefined,
+  config?: InventoryConfigStatus,
+  credentials?: InventoryConfigStatus,
+): LocalRuntimeDetailPanel {
+  const copy = RUNTIME_DETAIL_COPY[id];
+  const rows: LocalRuntimeDetailRow[] = [
+    { label: 'Readiness', value: readinessDiagnosis(readiness), tone: readiness === 'ready' ? 'ok' : readiness === 'broken' ? 'danger' : readiness === 'needs_config' || readiness === 'needs_credentials' ? 'warn' : 'muted' },
+    { label: copy.evidenceLabel, value: runtimeDetail(tool, config), tone: readiness === 'ready' ? 'ok' : readiness === 'broken' ? 'danger' : 'muted' },
+  ];
+
+  if (tool.version) rows.push({ label: 'Version', value: tool.version, tone: 'ok' });
+  if (config) rows.push({ label: 'Configuration', value: config.exists ? 'Configuration marker detected by desktop inventory.' : 'Configuration marker was not detected.', tone: config.exists ? 'ok' : 'warn' });
+  if (credentials) rows.push({
+    label: 'Credentials',
+    value: hasAnyCredentialMarker(credentials)
+      ? 'Credential markers detected without exposing secret values.'
+      : 'Credential markers were not detected.',
+    tone: hasAnyCredentialMarker(credentials) ? 'ok' : 'warn',
+  });
+
+  for (const serviceId of RUNTIME_SERVICE_IDS[id] ?? []) {
+    const service = inventory?.services[serviceId];
+    if (!service) continue;
+    rows.push({
+      label: service.label,
+      value: serviceDetailValue(service),
+      tone: serviceTone(service),
+    });
+  }
+
+  rows.push({
+    label: 'Next safe action',
+    value: action ? `${action.label} (preview only)` : 'No renderer action is available.',
+    tone: action?.disabled ? 'muted' : 'ok',
+  });
+
+  return {
+    title: copy.title,
+    summary: `${tool.label} is ${readinessLabel(readiness).toLowerCase()}. ${readinessDiagnosis(readiness)}`,
+    rows,
+    nextSteps: [readinessNextStep(readiness, id, action)],
+  };
+}
+
 function toRuntimeItem(inventory: LocalInventory | null, id: CanonicalRuntimeId): LocalToolItem {
   const inventoryKey = RUNTIME_INVENTORY_KEYS[id];
   const tool = inventory?.tools[inventoryKey] ?? fallbackInventoryTool(inventoryKey, 'agent-runtime');
@@ -194,6 +319,7 @@ function toRuntimeItem(inventory: LocalInventory | null, id: CanonicalRuntimeId)
   const credentials = runtimeCredentialConfig(inventory, id);
   const readiness = runtimeReadiness(tool, config, credentials);
   const actions = toolActions(recipe, tool.available);
+  const primaryAction = primaryActionFor(readiness, actions);
   return {
     id,
     label: tool.label,
@@ -210,7 +336,8 @@ function toRuntimeItem(inventory: LocalInventory | null, id: CanonicalRuntimeId)
     healthChecks: recipe?.healthChecks ?? [],
     config,
     actions,
-    primaryAction: primaryActionFor(readiness, actions),
+    primaryAction,
+    detailPanel: buildRuntimeDetailPanel(inventory, id, tool, readiness, primaryAction, config, credentials),
   };
 }
 

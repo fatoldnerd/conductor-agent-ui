@@ -14,6 +14,8 @@ describe('production operational UI data sources', () => {
     expect(appSource).toContain('tool.categoryLabel');
     expect(appSource).toContain('tool.diagnosis');
     expect(appSource).toContain('tool.primaryAction');
+    expect(appSource).toContain('RuntimeDetailPanel');
+    expect(appSource).toContain('tool.detailPanel');
     expect(appSource).toContain('readinessLabel(tool.readiness)');
   });
 });
