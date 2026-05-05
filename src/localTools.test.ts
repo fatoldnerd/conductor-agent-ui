@@ -277,11 +277,19 @@ describe('local tool inventory view model', () => {
     });
     expect(codex?.detailPanel?.rows).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Next safe action', value: 'Health check (preview only)' }),
+      expect.objectContaining({ label: 'Preflight risk', value: 'low risk' }),
+      expect.objectContaining({ label: 'Expected effect', value: expect.stringContaining('no live check is executed') }),
+      expect.objectContaining({ label: 'Approval', value: expect.stringContaining('User approval would be required') }),
+      expect.objectContaining({ label: 'Requirements', value: expect.stringContaining('trusted metadata') }),
     ]));
     expect(codex?.detailPanel?.nextSteps[0]).toContain('Preview only:');
     expect(codex?.actions.find((action) => action.kind === 'open_docs')).toMatchObject({
       previewOnly: false,
       executesCommand: false,
+      preflight: expect.objectContaining({
+        riskLevel: 'none',
+        requiresApproval: false,
+      }),
     });
   });
 

@@ -391,6 +391,7 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
   const selectedItem = categories.flatMap((category) => category.items).find((item) => item.recipeId === selectedRecipeId) ?? null;
   const selectedRecipe = selectedItem?.recipe ?? null;
   const selectedHealthChecks = selectedItem?.healthChecks ?? [];
+  const selectedActionMetadata = selectedItem?.actions.find((action) => action.kind === selectedAction) ?? null;
 
   const selectAction = (item: LocalToolItem, action: LocalToolAction) => {
     if (action.kind === 'open_docs' && action.docsUrl) {
@@ -461,13 +462,14 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
             <div className="install-preview-head">
               <div>
                 <strong>{selectedRecipe.name}</strong>
-                <span>{selectedActionLabel(selectedAction)} · {selectedRecipe.description}</span>
+                <span>{selectedActionLabel(selectedAction)} preflight · {selectedRecipe.description}</span>
               </div>
               <div className="actions">
                 <button className="btn-ghost" onClick={() => window.open(selectedRecipe.docsUrl, '_blank', 'noopener,noreferrer')}>Open docs</button>
                 <button className="btn-ghost primary" onClick={() => setView('integrations')}>Open installer workflow</button>
               </div>
             </div>
+            {selectedActionMetadata && <ActionPreflightDetails action={selectedActionMetadata} />}
             {selectedAction === 'health_check' ? (
               <HealthPreview checks={selectedHealthChecks} />
             ) : selectedAction === 'configure' ? (
@@ -484,9 +486,21 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
             </div>
           </>
         ) : (
-          <p className="empty-state">Select Preview install, Configure, or Health check on an agent runtime to inspect the safe path.</p>
+          <p className="empty-state">Select a preview action on an agent runtime to inspect suggested preflight details. Nothing runs from this panel.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function ActionPreflightDetails({ action }: { action: LocalToolAction }) {
+  return (
+    <div className="install-callout runtime-callout">
+      <IconInfo />
+      <span>
+        Suggested preflight only. Expected effect: {action.preflight.expectedEffect} Risk: {action.preflight.riskLevel}.
+        {action.preflight.requiresApproval ? ' User approval would be required before any future execution.' : ' No approval is required for this non-mutating action.'}
+      </span>
     </div>
   );
 }

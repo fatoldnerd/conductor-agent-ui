@@ -72,18 +72,46 @@ describe('canonical runtime readiness model', () => {
     expect(safeAction('preview_install')).toMatchObject({
       previewOnly: true,
       executesCommand: false,
+      preflight: expect.objectContaining({
+        riskLevel: 'medium',
+        requiresApproval: true,
+        expectedEffect: expect.stringContaining('Previews'),
+      }),
     });
     expect(safeAction('configure')).toMatchObject({
       previewOnly: true,
       executesCommand: false,
+      preflight: expect.objectContaining({
+        riskLevel: 'medium',
+        requiresApproval: true,
+      }),
     });
     expect(safeAction('health_check')).toMatchObject({
       previewOnly: true,
       executesCommand: false,
+      preflight: expect.objectContaining({
+        riskLevel: 'low',
+        expectedEffect: expect.stringContaining('no live check is executed'),
+      }),
     });
     expect(safeAction('open_docs')).toMatchObject({
       previewOnly: false,
       executesCommand: false,
+      preflight: expect.objectContaining({
+        riskLevel: 'none',
+        requiresApproval: false,
+      }),
     });
+  });
+
+  it('defines preflight detail for every action without enabling execution', () => {
+    for (const metadata of Object.values(SAFE_ACTION_METADATA)) {
+      expect(metadata.executesCommand).toBe(false);
+      expect(metadata.preflight.expectedEffect.length).toBeGreaterThan(10);
+      expect(metadata.preflight.requirements.length).toBeGreaterThan(0);
+      if (metadata.previewOnly) {
+        expect(metadata.preflight.expectedEffect).toMatch(/shows|previews|communicates/i);
+      }
+    }
   });
 });

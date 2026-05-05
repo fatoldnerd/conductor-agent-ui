@@ -308,6 +308,14 @@ function buildRuntimeDetailPanel(
     value: action ? `${action.label} (${actionModeLabel(action).toLowerCase()})` : 'No renderer action is available.',
     tone: action?.disabled ? 'muted' : 'ok',
   });
+  if (action?.preflight) {
+    rows.push(
+      { label: 'Preflight risk', value: `${action.preflight.riskLevel} risk`, tone: action.preflight.riskLevel === 'high' ? 'danger' : action.preflight.riskLevel === 'medium' ? 'warn' : 'muted' },
+      { label: 'Expected effect', value: action.preflight.expectedEffect, tone: 'muted' },
+      { label: 'Approval', value: action.preflight.requiresApproval ? 'User approval would be required before any future execution.' : 'No approval is required for this non-mutating action.', tone: action.preflight.requiresApproval ? 'warn' : 'muted' },
+      { label: 'Requirements', value: action.preflight.requirements.join(' '), tone: 'muted' },
+    );
+  }
 
   return {
     title: copy.title,

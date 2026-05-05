@@ -26,6 +26,15 @@ export type RuntimeActionKind =
   | 'coming_soon'
   | 'requires_desktop';
 
+export type RuntimeActionRiskLevel = 'none' | 'low' | 'medium' | 'high';
+
+export type RuntimeActionPreflight = {
+  requirements: string[];
+  riskLevel: RuntimeActionRiskLevel;
+  expectedEffect: string;
+  requiresApproval: boolean;
+};
+
 export type RuntimeActionMetadata = {
   kind: RuntimeActionKind;
   label: string;
@@ -34,6 +43,7 @@ export type RuntimeActionMetadata = {
   previewOnly: boolean;
   executesCommand: false;
   requiresDesktop: boolean;
+  preflight: RuntimeActionPreflight;
 };
 
 export type RuntimeReadinessMetadata = {
@@ -127,6 +137,12 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     previewOnly: false,
     executesCommand: false,
     requiresDesktop: true,
+    preflight: {
+      requirements: ['Electron desktop bridge must be available.'],
+      riskLevel: 'none',
+      expectedEffect: 'Requests a new sanitized inventory scan from the desktop app.',
+      requiresApproval: false,
+    },
   },
   open_docs: {
     kind: 'open_docs',
@@ -136,6 +152,12 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     previewOnly: false,
     executesCommand: false,
     requiresDesktop: false,
+    preflight: {
+      requirements: ['A documentation URL must be present in trusted recipe metadata.'],
+      riskLevel: 'none',
+      expectedEffect: 'Opens documentation in the browser; no local runtime state changes.',
+      requiresApproval: false,
+    },
   },
   copy_install_command: {
     kind: 'copy_install_command',
@@ -145,6 +167,12 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     previewOnly: true,
     executesCommand: false,
     requiresDesktop: false,
+    preflight: {
+      requirements: ['A documented install command must be available in trusted recipe metadata.'],
+      riskLevel: 'low',
+      expectedEffect: 'Shows a command for manual use outside Conductor; nothing is run by the renderer.',
+      requiresApproval: true,
+    },
   },
   configure: {
     kind: 'configure',
@@ -154,6 +182,12 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     previewOnly: true,
     executesCommand: false,
     requiresDesktop: false,
+    preflight: {
+      requirements: ['Configuration guidance must come from trusted recipe metadata or sanitized inventory.'],
+      riskLevel: 'medium',
+      expectedEffect: 'Shows configuration guidance only; no files are written and no shell commands are run.',
+      requiresApproval: true,
+    },
   },
   health_check: {
     kind: 'health_check',
@@ -163,6 +197,12 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     previewOnly: true,
     executesCommand: false,
     requiresDesktop: false,
+    preflight: {
+      requirements: ['Health checks must be represented as trusted metadata until an allowlisted desktop API exists.'],
+      riskLevel: 'low',
+      expectedEffect: 'Shows health-check requirements and expected checks; no live check is executed by the renderer.',
+      requiresApproval: true,
+    },
   },
   preview_install: {
     kind: 'preview_install',
@@ -172,6 +212,12 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     previewOnly: true,
     executesCommand: false,
     requiresDesktop: false,
+    preflight: {
+      requirements: ['Installer steps must come from trusted recipe metadata.'],
+      riskLevel: 'medium',
+      expectedEffect: 'Previews install or update steps; no installation is started.',
+      requiresApproval: true,
+    },
   },
   coming_soon: {
     kind: 'coming_soon',
@@ -181,6 +227,12 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     previewOnly: true,
     executesCommand: false,
     requiresDesktop: false,
+    preflight: {
+      requirements: ['An allowlisted Electron implementation must be added before this can execute.'],
+      riskLevel: 'none',
+      expectedEffect: 'Communicates that no operational action is currently available.',
+      requiresApproval: true,
+    },
   },
   requires_desktop: {
     kind: 'requires_desktop',
@@ -190,6 +242,12 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     previewOnly: false,
     executesCommand: false,
     requiresDesktop: true,
+    preflight: {
+      requirements: ['Electron desktop bridge must be available.'],
+      riskLevel: 'none',
+      expectedEffect: 'Explains that the action is unavailable outside the desktop app.',
+      requiresApproval: false,
+    },
   },
 };
 
