@@ -2,6 +2,7 @@ import type { InventoryConfigStatus, InventoryServiceStatus, InventoryToolStatus
 import { getIntegrationRecipe, listIntegrationRecipes, type IntegrationHealthCheck, type IntegrationRecipe } from './integrations/recipes';
 import { buildRuntimeActionApproval, type RuntimeActionApprovalPolicy } from './runtimeActionApproval';
 import { buildRuntimeActionExecutionContract, type RuntimeActionExecutionContract } from './runtimeActionAllowlist';
+import { buildRuntimeActionRequestEnvelope, type RuntimeActionRequestEnvelope } from './runtimeActionRequestEnvelope';
 import {
   CANONICAL_RUNTIME_IDS,
   RUNTIME_CATEGORY_LABELS,
@@ -26,6 +27,7 @@ export type LocalToolAction = RuntimeActionMetadata & {
   title?: string;
   approval: RuntimeActionApprovalPolicy;
   executionContract: RuntimeActionExecutionContract;
+  requestEnvelope?: RuntimeActionRequestEnvelope;
 };
 
 export type LocalRuntimeDetailRow = {
@@ -200,8 +202,24 @@ function runtimeReadiness(tool: InventoryToolStatus, config?: InventoryConfigSta
   return 'ready';
 }
 
-function withApproval(action: RuntimeActionMetadata, extras: Omit<LocalToolAction, keyof RuntimeActionMetadata | 'approval' | 'executionContract'> = {}): LocalToolAction {
+function withApproval(action: RuntimeActionMetadata, extras: Omit<LocalToolAction, keyof RuntimeActionMetadata | 'approval' | 'executionContract' | 'requestEnvelope'> = {}): LocalToolAction {
   return { ...action, ...extras, approval: buildRuntimeActionApproval(action), executionContract: buildRuntimeActionExecutionContract(action) };
+}
+
+function withRuntimeRequestEnvelope(action: LocalToolAction, runtimeId: CanonicalRuntimeId): LocalToolAction {
+  return {
+    ...action,
+    requestEnvelope: buildRuntimeActionRequestEnvelope(action, action.executionContract, {
+      runtimeId,
+      source: 'agent-runtimes',
+      requestedBy: 'renderer',
+      correlationId: `${runtimeId}:${action.kind}`,
+    }),
+  };
+}
+
+function withRuntimeRequestEnvelopes(actions: LocalToolAction[], runtimeId: CanonicalRuntimeId): LocalToolAction[] {
+  return actions.map((action) => withRuntimeRequestEnvelope(action, runtimeId));
 }
 
 function toolActions(recipe?: IntegrationRecipe, installed = false): LocalToolAction[] {
@@ -340,8 +358,9 @@ function toRuntimeItem(inventory: LocalInventory | null, id: CanonicalRuntimeId)
   const config = runtimeConfig(inventory, id);
   const credentials = runtimeCredentialConfig(inventory, id);
   const readiness = runtimeReadiness(tool, config, credentials);
-  const actions = toolActions(recipe, tool.available);
+  const actions = withRuntimeRequestEnvelopes(toolActions(recipe, tool.available), id);
   const primaryAction = primaryActionFor(readiness, actions);
+  const runtimePrimaryAction = primaryAction ? withRuntimeRequestEnvelope(primaryAction, id) : undefined;
   return {
     id,
     label: tool.label,
@@ -358,8 +377,8 @@ function toRuntimeItem(inventory: LocalInventory | null, id: CanonicalRuntimeId)
     healthChecks: recipe?.healthChecks ?? [],
     config,
     actions,
-    primaryAction,
-    detailPanel: buildRuntimeDetailPanel(inventory, id, tool, readiness, primaryAction, config, credentials),
+    primaryAction: runtimePrimaryAction,
+    detailPanel: buildRuntimeDetailPanel(inventory, id, tool, readiness, runtimePrimaryAction, config, credentials),
   };
 }
 

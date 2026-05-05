@@ -498,7 +498,7 @@ function ActionPreflightDetails({ action }: { action: LocalToolAction }) {
     <div className="install-callout runtime-callout">
       <IconInfo />
       <span>
-        Suggested next step only. No command will run without explicit approval. Expected effect: {action.preflight.expectedEffect} Risk: {action.preflight.riskLevel}. Approval: {approvalModeLabel(action.approval.mode)}. Execution contract: {executionContractLabel(action.executionContract.status)}. {action.executionContract.reason} {action.approval.userFacingSummary}
+        Suggested next step only. No command will run without explicit approval. Expected effect: {action.preflight.expectedEffect} Risk: {action.preflight.riskLevel}. Approval: {approvalModeLabel(action.approval.mode)}. Execution contract: {executionContractLabel(action.executionContract.status)}. Request envelope: {action.requestEnvelope?.submitState ?? 'not prepared'}. {action.executionContract.reason} {action.approval.userFacingSummary}
       </span>
     </div>
   );

@@ -24,6 +24,7 @@ describe('production operational UI data sources', () => {
     expect(appSource).toContain('action.approval.mode');
     expect(appSource).toContain('action.executionContract.status');
     expect(appSource).toContain('action.executionContract.reason');
+    expect(appSource).toContain('action.requestEnvelope?.submitState');
     expect(appSource).toContain('No command will run without explicit approval');
     expect(appSource).toContain('readinessLabel(tool.readiness)');
   });
