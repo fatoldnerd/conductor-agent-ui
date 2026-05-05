@@ -183,6 +183,13 @@ export type AgentProjectValidation =
   | { valid: true; projectPath: string }
   | { valid: false; error: string };
 
+export type RuntimeActionAuditHistoryReadResult = {
+  schemaVersion: 1;
+  status: 'unavailable' | 'empty' | 'ready';
+  events: unknown[];
+  message: string;
+};
+
 declare global {
   interface Window {
     conductor?: {
@@ -208,6 +215,9 @@ declare global {
         stopRun: (runId: string) => Promise<AgentRunSnapshot>;
         getRun: (runId: string) => Promise<AgentRunSnapshot>;
         onRunEvent: (callback: (event: AgentRunEvent) => void) => () => void;
+      };
+      runtimeActions: {
+        getAuditHistory: () => Promise<RuntimeActionAuditHistoryReadResult>;
       };
     };
   }
