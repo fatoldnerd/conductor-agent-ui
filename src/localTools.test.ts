@@ -287,6 +287,14 @@ describe('local tool inventory view model', () => {
         requiresExplicitApproval: true,
         reason: expect.stringContaining('metadata-only'),
       }),
+      requestEnvelope: expect.objectContaining({
+        schemaVersion: 1,
+        runtimeId: 'codex-cli',
+        actionKind: 'health_check',
+        submitState: 'not_submittable',
+        desktopApi: null,
+        payload: null,
+      }),
     });
     expect(codex?.detailPanel?.rows).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Next safe action', value: 'Health check (preview only)' }),
