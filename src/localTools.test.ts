@@ -295,6 +295,14 @@ describe('local tool inventory view model', () => {
         desktopApi: null,
         payload: null,
       }),
+      approvalWorkflow: expect.objectContaining({
+        schemaVersion: 1,
+        state: 'not_queueable',
+        canApprove: false,
+        canReject: false,
+        requestedSummary: 'Codex CLI requested health check from Agent Runtimes.',
+        approvalPrompt: 'No approval request is queued because this action is preview metadata only.',
+      }),
     });
     expect(codex?.detailPanel?.rows).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Next safe action', value: 'Health check (preview only)' }),
