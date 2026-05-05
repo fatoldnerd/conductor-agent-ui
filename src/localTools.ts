@@ -2,6 +2,7 @@ import type { InventoryConfigStatus, InventoryServiceStatus, InventoryToolStatus
 import { getIntegrationRecipe, listIntegrationRecipes, type IntegrationHealthCheck, type IntegrationRecipe } from './integrations/recipes';
 import { buildRuntimeActionApproval, type RuntimeActionApprovalPolicy } from './runtimeActionApproval';
 import { buildRuntimeActionExecutionContract, type RuntimeActionExecutionContract } from './runtimeActionAllowlist';
+import { buildRuntimeActionApprovalQueueItem, type RuntimeActionApprovalQueueItem } from './runtimeActionApprovalWorkflow';
 import { buildRuntimeActionRequestEnvelope, type RuntimeActionRequestEnvelope } from './runtimeActionRequestEnvelope';
 import {
   CANONICAL_RUNTIME_IDS,
@@ -28,6 +29,7 @@ export type LocalToolAction = RuntimeActionMetadata & {
   approval: RuntimeActionApprovalPolicy;
   executionContract: RuntimeActionExecutionContract;
   requestEnvelope?: RuntimeActionRequestEnvelope;
+  approvalWorkflow?: RuntimeActionApprovalQueueItem;
 };
 
 export type LocalRuntimeDetailRow = {
@@ -202,18 +204,24 @@ function runtimeReadiness(tool: InventoryToolStatus, config?: InventoryConfigSta
   return 'ready';
 }
 
-function withApproval(action: RuntimeActionMetadata, extras: Omit<LocalToolAction, keyof RuntimeActionMetadata | 'approval' | 'executionContract' | 'requestEnvelope'> = {}): LocalToolAction {
+function withApproval(action: RuntimeActionMetadata, extras: Omit<LocalToolAction, keyof RuntimeActionMetadata | 'approval' | 'executionContract' | 'requestEnvelope' | 'approvalWorkflow'> = {}): LocalToolAction {
   return { ...action, ...extras, approval: buildRuntimeActionApproval(action), executionContract: buildRuntimeActionExecutionContract(action) };
 }
 
 function withRuntimeRequestEnvelope(action: LocalToolAction, runtimeId: CanonicalRuntimeId): LocalToolAction {
+  const requestEnvelope = buildRuntimeActionRequestEnvelope(action, action.executionContract, {
+    runtimeId,
+    source: 'agent-runtimes',
+    requestedBy: 'renderer',
+    correlationId: `${runtimeId}:${action.kind}`,
+  });
+
   return {
     ...action,
-    requestEnvelope: buildRuntimeActionRequestEnvelope(action, action.executionContract, {
-      runtimeId,
-      source: 'agent-runtimes',
-      requestedBy: 'renderer',
-      correlationId: `${runtimeId}:${action.kind}`,
+    requestEnvelope,
+    approvalWorkflow: buildRuntimeActionApprovalQueueItem({
+      envelope: requestEnvelope,
+      requestedAt: 'preview-only',
     }),
   };
 }
