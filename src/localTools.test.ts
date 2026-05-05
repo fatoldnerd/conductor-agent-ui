@@ -279,7 +279,8 @@ describe('local tool inventory view model', () => {
       expect.objectContaining({ label: 'Next safe action', value: 'Health check (preview only)' }),
       expect.objectContaining({ label: 'Preflight risk', value: 'low risk' }),
       expect.objectContaining({ label: 'Expected effect', value: expect.stringContaining('no live check is executed') }),
-      expect.objectContaining({ label: 'Approval', value: expect.stringContaining('User approval would be required') }),
+      expect.objectContaining({ label: 'Approval', value: expect.stringContaining('Runtime readiness is not blocked') }),
+      expect.objectContaining({ label: 'Approval', value: expect.stringContaining('future Conductor-triggered action') }),
       expect.objectContaining({ label: 'Requirements', value: expect.stringContaining('trusted metadata') }),
     ]));
     expect(codex?.detailPanel?.nextSteps[0]).toContain('Preview only:');

@@ -20,6 +20,8 @@ describe('production operational UI data sources', () => {
     expect(appSource).toContain('Suggested preview');
     expect(appSource).toContain('ActionPreflightDetails');
     expect(appSource).toContain('action.preflight.expectedEffect');
+    expect(appSource).toContain('No command will run without explicit approval');
+    expect(appSource).toContain('Runtime readiness is not blocked');
     expect(appSource).toContain('readinessLabel(tool.readiness)');
   });
 });

@@ -498,8 +498,8 @@ function ActionPreflightDetails({ action }: { action: LocalToolAction }) {
     <div className="install-callout runtime-callout">
       <IconInfo />
       <span>
-        Suggested preflight only. Expected effect: {action.preflight.expectedEffect} Risk: {action.preflight.riskLevel}.
-        {action.preflight.requiresApproval ? ' User approval would be required before any future execution.' : ' No approval is required for this non-mutating action.'}
+        Suggested next step only. No command will run without explicit approval. Expected effect: {action.preflight.expectedEffect} Risk: {action.preflight.riskLevel}.
+        {action.preflight.requiresApproval ? ' Runtime readiness is not blocked; only future Conductor-triggered actions would ask first.' : ' No approval is required for this non-mutating action.'}
       </span>
     </div>
   );

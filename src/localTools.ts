@@ -312,7 +312,7 @@ function buildRuntimeDetailPanel(
     rows.push(
       { label: 'Preflight risk', value: `${action.preflight.riskLevel} risk`, tone: action.preflight.riskLevel === 'high' ? 'danger' : action.preflight.riskLevel === 'medium' ? 'warn' : 'muted' },
       { label: 'Expected effect', value: action.preflight.expectedEffect, tone: 'muted' },
-      { label: 'Approval', value: action.preflight.requiresApproval ? 'User approval would be required before any future execution.' : 'No approval is required for this non-mutating action.', tone: action.preflight.requiresApproval ? 'warn' : 'muted' },
+      { label: 'Approval', value: action.preflight.requiresApproval ? 'Runtime readiness is not blocked. Only a future Conductor-triggered action would ask for explicit approval first.' : 'No approval is required for this non-mutating action.', tone: 'muted' },
       { label: 'Requirements', value: action.preflight.requirements.join(' '), tone: 'muted' },
     );
   }

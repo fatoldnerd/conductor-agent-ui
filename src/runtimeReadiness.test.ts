@@ -75,7 +75,7 @@ describe('canonical runtime readiness model', () => {
       preflight: expect.objectContaining({
         riskLevel: 'medium',
         requiresApproval: true,
-        expectedEffect: expect.stringContaining('Previews'),
+        expectedEffect: expect.stringContaining('Suggested next step only'),
       }),
     });
     expect(safeAction('configure')).toMatchObject({
@@ -110,7 +110,7 @@ describe('canonical runtime readiness model', () => {
       expect(metadata.preflight.expectedEffect.length).toBeGreaterThan(10);
       expect(metadata.preflight.requirements.length).toBeGreaterThan(0);
       if (metadata.previewOnly) {
-        expect(metadata.preflight.expectedEffect).toMatch(/shows|previews|communicates/i);
+        expect(metadata.preflight.expectedEffect).toMatch(/suggested next step|preflight only|shows|previews|communicates/i);
       }
     }
   });

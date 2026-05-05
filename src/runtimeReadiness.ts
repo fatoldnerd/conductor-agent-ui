@@ -170,7 +170,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     preflight: {
       requirements: ['A documented install command must be available in trusted recipe metadata.'],
       riskLevel: 'low',
-      expectedEffect: 'Shows a command for manual use outside Conductor; nothing is run by the renderer.',
+      expectedEffect: 'Suggested next step only. Shows a command for manual use outside Conductor; nothing is run by the renderer.',
       requiresApproval: true,
     },
   },
@@ -185,7 +185,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     preflight: {
       requirements: ['Configuration guidance must come from trusted recipe metadata or sanitized inventory.'],
       riskLevel: 'medium',
-      expectedEffect: 'Shows configuration guidance only; no files are written and no shell commands are run.',
+      expectedEffect: 'Suggested next step only. Shows configuration guidance; no files are written and no shell commands are run.',
       requiresApproval: true,
     },
   },
@@ -200,7 +200,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     preflight: {
       requirements: ['Health checks must be represented as trusted metadata until an allowlisted desktop API exists.'],
       riskLevel: 'low',
-      expectedEffect: 'Shows health-check requirements and expected checks; no live check is executed by the renderer.',
+      expectedEffect: 'Preflight only. This runtime is ready when inventory says ready; no live check is executed by the renderer.',
       requiresApproval: true,
     },
   },
@@ -215,7 +215,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     preflight: {
       requirements: ['Installer steps must come from trusted recipe metadata.'],
       riskLevel: 'medium',
-      expectedEffect: 'Previews install or update steps; no installation is started.',
+      expectedEffect: 'Suggested next step only. Previews install or update steps; no installation is started.',
       requiresApproval: true,
     },
   },
