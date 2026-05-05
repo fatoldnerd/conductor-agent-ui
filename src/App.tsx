@@ -32,7 +32,7 @@ import {
 } from './localTools';
 import { runtimeAvailable } from './agentRuntimeAvailability';
 import { deriveInventoryViewState } from './inventoryViewState';
-import { buildRuntimeActionHistoryViewModel } from './runtimeActionHistoryViewModel';
+import { buildRuntimeActionHistorySourceState } from './runtimeActionHistorySource';
 import { readinessLabel } from './runtimeReadiness';
 import type {
   AgentRunEvent,
@@ -1085,17 +1085,22 @@ function DiagnosticsView() {
 /* -------------------------------------------------------------- Activity view */
 
 function ActivityView() {
-  const runtimeActionHistory = useMemo(() => buildRuntimeActionHistoryViewModel([]), []);
+  const desktopAvailable = Boolean(window.conductor);
+  const runtimeActionHistorySource = useMemo(
+    () => buildRuntimeActionHistorySourceState({ desktopBridgeAvailable: desktopAvailable }),
+    [desktopAvailable],
+  );
+  const runtimeActionHistory = runtimeActionHistorySource.viewModel;
 
   return (
     <div className="local-tools-page">
       <div className="card local-tools-hero">
         <span className="eyebrow">Activity</span>
         <h2>{runtimeActionHistory.empty ? runtimeActionHistory.emptyTitle : 'Runtime action history'}</h2>
-        <p>{runtimeActionHistory.empty ? runtimeActionHistory.emptyBody : 'Sanitized runtime action history from trusted audit events.'}</p>
+        <p>{runtimeActionHistorySource.message}</p>
         <div className="actions">
           <button className="btn-ghost primary" disabled>
-            Awaiting real audit events
+            {runtimeActionHistorySource.status === 'desktop_required' ? 'Requires desktop bridge' : 'Awaiting real audit events'}
           </button>
           <span className="hint">No fake live activity is rendered.</span>
         </div>
