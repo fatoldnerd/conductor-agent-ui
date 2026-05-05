@@ -32,6 +32,7 @@ import {
 } from './localTools';
 import { runtimeAvailable } from './agentRuntimeAvailability';
 import { deriveInventoryViewState } from './inventoryViewState';
+import { buildRuntimeActionHistoryViewModel } from './runtimeActionHistoryViewModel';
 import { readinessLabel } from './runtimeReadiness';
 import type {
   AgentRunEvent,
@@ -1084,12 +1085,53 @@ function DiagnosticsView() {
 /* -------------------------------------------------------------- Activity view */
 
 function ActivityView() {
+  const runtimeActionHistory = useMemo(() => buildRuntimeActionHistoryViewModel([]), []);
+
   return (
-    <OperationalEmptyState
-      eyebrow="Activity"
-      title="No real activity stream is connected yet"
-      body="Activity will appear only after Conductor has a trusted local event source or persisted run log. This screen does not show synthetic live events."
-    />
+    <div className="local-tools-page">
+      <div className="card local-tools-hero">
+        <span className="eyebrow">Activity</span>
+        <h2>{runtimeActionHistory.empty ? runtimeActionHistory.emptyTitle : 'Runtime action history'}</h2>
+        <p>{runtimeActionHistory.empty ? runtimeActionHistory.emptyBody : 'Sanitized runtime action history from trusted audit events.'}</p>
+        <div className="actions">
+          <button className="btn-ghost primary" disabled>
+            Awaiting real audit events
+          </button>
+          <span className="hint">No fake live activity is rendered.</span>
+        </div>
+      </div>
+
+      <div className="runtime-overview-grid">
+        <RuntimeMetric label="History entries" value={runtimeActionHistory.stats.total} />
+        <RuntimeMetric label="Pending approval" value={runtimeActionHistory.stats.pendingApproval} />
+        <RuntimeMetric label="Blocked" value={runtimeActionHistory.stats.blocked} />
+        <RuntimeMetric label="Completed" value={runtimeActionHistory.stats.completed} />
+      </div>
+
+      <div className="card local-tool-section">
+        <div className="section-head compact">
+          <h2>Runtime action history</h2>
+          <span className="hint">Sanitized audit model only</span>
+        </div>
+        {runtimeActionHistory.empty ? (
+          <p className="empty-state">{runtimeActionHistory.emptyBody}</p>
+        ) : (
+          <div className="local-tool-list">
+            {runtimeActionHistory.entries.map((entry) => (
+              <div className="local-tool-row" key={entry.correlationId}>
+                <span className={`status-dot ${entry.tone === 'ok' ? 'ok' : entry.tone === 'danger' ? 'missing' : ''}`} />
+                <div className="local-tool-main">
+                  <strong>{entry.title}</strong>
+                  <span>{entry.subtitle}</span>
+                  <em>{entry.eventCount} sanitized event(s) from {entry.sourceLabel}</em>
+                </div>
+                <span className={`chip ${entry.tone === 'ok' ? 'chip-ok' : entry.tone === 'danger' ? 'chip-warn' : 'chip-muted'}`}>{entry.state}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
