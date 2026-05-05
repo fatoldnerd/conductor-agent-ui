@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildRuntimeActionAuditEvent } from './runtimeActionAuditLog';
+import { buildRuntimeActionAuditPersistenceReadResult } from './runtimeActionAuditPersistence';
 import { buildRuntimeActionExecutionContract, type FutureExecutableRuntimeAction } from './runtimeActionAllowlist';
 import { buildRuntimeActionHistorySourceState, normalizeRuntimeActionHistorySourceEvents } from './runtimeActionHistorySource';
 import { buildRuntimeActionRequestEnvelope } from './runtimeActionRequestEnvelope';
@@ -117,5 +118,22 @@ describe('runtime action history source contract', () => {
     });
     expect(JSON.stringify(state)).not.toContain('/Users/');
     expect(JSON.stringify(state)).not.toContain('token=secret');
+  });
+
+  it('can be driven by the audit persistence read contract without exposing storage details', () => {
+    const persistence = buildRuntimeActionAuditPersistenceReadResult({
+      available: true,
+      events: [auditEvent({ reason: 'command bash -lc should be removed', safeForLog: false })],
+    });
+    const state = buildRuntimeActionHistorySourceState({
+      desktopBridgeAvailable: true,
+      sourceKind: 'electron-local',
+      persistence,
+    });
+
+    expect(state.status).toBe('ready');
+    expect(state.events).toHaveLength(1);
+    expect(state.events[0].reason).toBe('[redacted]');
+    expect(JSON.stringify(state)).not.toContain('bash -lc');
   });
 });

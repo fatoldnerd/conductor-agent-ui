@@ -32,6 +32,9 @@ const conductorApi = {
       return () => ipcRenderer.removeListener('agents:runEvent', listener);
     },
   },
+  runtimeActions: {
+    getAuditHistory: () => ipcRenderer.invoke('runtimeActions:getAuditHistory'),
+  },
 };
 
 contextBridge.exposeInMainWorld('conductor', conductorApi);

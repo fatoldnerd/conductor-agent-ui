@@ -1,4 +1,5 @@
 import { redactRuntimeActionAuditEvent, type RuntimeActionAuditEvent } from './runtimeActionAuditLog';
+import type { RuntimeActionAuditPersistenceReadResult } from './runtimeActionAuditPersistence';
 import { buildRuntimeActionHistoryViewModel, type RuntimeActionHistoryViewModel } from './runtimeActionHistoryViewModel';
 
 export type RuntimeActionHistorySourceKind = 'none' | 'electron-local';
@@ -18,6 +19,7 @@ export type RuntimeActionHistorySourceInput = {
   desktopBridgeAvailable: boolean;
   sourceKind?: RuntimeActionHistorySourceKind;
   events?: RuntimeActionAuditEvent[];
+  persistence?: RuntimeActionAuditPersistenceReadResult;
   error?: string | null;
 };
 
@@ -64,7 +66,15 @@ export function buildRuntimeActionHistorySourceState(input: RuntimeActionHistory
     );
   }
 
-  const events = normalizeRuntimeActionHistorySourceEvents(input.events ?? []);
+  if (input.persistence?.status === 'unavailable') {
+    return emptySource(
+      'error',
+      sourceKind,
+      'Runtime action history source is unavailable. Details were redacted for display.',
+    );
+  }
+
+  const events = normalizeRuntimeActionHistorySourceEvents(input.persistence?.events ?? input.events ?? []);
   return {
     schemaVersion: 1,
     status: 'ready',

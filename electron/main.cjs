@@ -248,6 +248,16 @@ ipcMain.handle('integrations:listAuditEvents', async (event, runId) => {
   return listAuditEvents(runId);
 });
 
+ipcMain.handle('runtimeActions:getAuditHistory', async (event) => {
+  assertTrustedSender(event);
+  return {
+    schemaVersion: 1,
+    status: 'unavailable',
+    events: [],
+    message: 'Runtime action audit persistence is not connected yet. Conductor will not show fake history.',
+  };
+});
+
 ipcMain.handle('agents:listRuntimes', async (event) => {
   assertTrustedSender(event);
   return listAgentRuntimes();
