@@ -1,6 +1,7 @@
 import type { InventoryConfigStatus, InventoryServiceStatus, InventoryToolStatus, LocalInventory } from './electron';
 import { getIntegrationRecipe, listIntegrationRecipes, type IntegrationHealthCheck, type IntegrationRecipe } from './integrations/recipes';
 import { buildRuntimeActionApproval, type RuntimeActionApprovalPolicy } from './runtimeActionApproval';
+import { buildRuntimeActionExecutionContract, type RuntimeActionExecutionContract } from './runtimeActionAllowlist';
 import {
   CANONICAL_RUNTIME_IDS,
   RUNTIME_CATEGORY_LABELS,
@@ -24,6 +25,7 @@ export type LocalToolAction = RuntimeActionMetadata & {
   disabled?: boolean;
   title?: string;
   approval: RuntimeActionApprovalPolicy;
+  executionContract: RuntimeActionExecutionContract;
 };
 
 export type LocalRuntimeDetailRow = {
@@ -198,8 +200,8 @@ function runtimeReadiness(tool: InventoryToolStatus, config?: InventoryConfigSta
   return 'ready';
 }
 
-function withApproval(action: RuntimeActionMetadata, extras: Omit<LocalToolAction, keyof RuntimeActionMetadata | 'approval'> = {}): LocalToolAction {
-  return { ...action, ...extras, approval: buildRuntimeActionApproval(action) };
+function withApproval(action: RuntimeActionMetadata, extras: Omit<LocalToolAction, keyof RuntimeActionMetadata | 'approval' | 'executionContract'> = {}): LocalToolAction {
+  return { ...action, ...extras, approval: buildRuntimeActionApproval(action), executionContract: buildRuntimeActionExecutionContract(action) };
 }
 
 function toolActions(recipe?: IntegrationRecipe, installed = false): LocalToolAction[] {

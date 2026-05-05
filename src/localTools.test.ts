@@ -280,6 +280,13 @@ describe('local tool inventory view model', () => {
         canExecuteNow: false,
         userFacingSummary: expect.stringContaining('Runtime readiness is not blocked'),
       }),
+      executionContract: expect.objectContaining({
+        status: 'metadata_only',
+        canExecuteFromRenderer: false,
+        allowlistedDesktopApi: null,
+        requiresExplicitApproval: true,
+        reason: expect.stringContaining('metadata-only'),
+      }),
     });
     expect(codex?.detailPanel?.rows).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Next safe action', value: 'Health check (preview only)' }),
