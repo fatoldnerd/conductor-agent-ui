@@ -16,6 +16,8 @@ describe('production operational UI data sources', () => {
     expect(appSource).toContain('tool.primaryAction');
     expect(appSource).toContain('RuntimeDetailPanel');
     expect(appSource).toContain('tool.detailPanel');
+    expect(appSource).toContain('action.previewOnly');
+    expect(appSource).toContain('Suggested preview');
     expect(appSource).toContain('readinessLabel(tool.readiness)');
   });
 });

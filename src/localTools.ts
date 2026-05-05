@@ -225,6 +225,12 @@ function primaryActionFor(readiness: LocalToolReadiness, actions: LocalToolActio
   return actions.find((action) => !action.disabled);
 }
 
+function actionModeLabel(action: LocalToolAction): string {
+  if (action.previewOnly) return 'Preview only';
+  if (action.requiresDesktop) return 'Desktop action';
+  return 'Safe action';
+}
+
 function runtimeSupportHint(recipe?: IntegrationRecipe, config?: InventoryConfigStatus, credentials?: InventoryConfigStatus): string | undefined {
   if (config && !config.exists) return 'Configuration file was not detected. Use Configure for safe setup guidance.';
   if (credentials?.exists && !hasAnyCredentialMarker(credentials)) return 'Credential markers were not detected. Configure credentials outside the renderer.';
@@ -235,7 +241,7 @@ function runtimeSupportHint(recipe?: IntegrationRecipe, config?: InventoryConfig
 function readinessNextStep(readiness: LocalToolReadiness, runtimeId: CanonicalRuntimeId, action?: LocalToolAction): string {
   if (readiness === 'ready' || readiness === 'installed' || readiness === 'running') {
     return action
-      ? `${action.label}: ${action.description}`
+      ? `${actionModeLabel(action)}: ${action.description}`
       : 'Use Conductor only after a trusted desktop inventory scan confirms this runtime.';
   }
   if (readiness === 'not_scanned') return 'Refresh inventory from the desktop app before treating this runtime as installed or missing.';
@@ -299,7 +305,7 @@ function buildRuntimeDetailPanel(
 
   rows.push({
     label: 'Next safe action',
-    value: action ? `${action.label} (preview only)` : 'No renderer action is available.',
+    value: action ? `${action.label} (${actionModeLabel(action).toLowerCase()})` : 'No renderer action is available.',
     tone: action?.disabled ? 'muted' : 'ok',
   });
 

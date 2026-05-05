@@ -31,6 +31,7 @@ export type RuntimeActionMetadata = {
   label: string;
   description: string;
   browserSafe: boolean;
+  previewOnly: boolean;
   executesCommand: false;
   requiresDesktop: boolean;
 };
@@ -123,6 +124,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     label: 'Refresh',
     description: 'Request a new sanitized desktop inventory scan.',
     browserSafe: false,
+    previewOnly: false,
     executesCommand: false,
     requiresDesktop: true,
   },
@@ -131,6 +133,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     label: 'Open docs',
     description: 'Open the runtime documentation URL.',
     browserSafe: true,
+    previewOnly: false,
     executesCommand: false,
     requiresDesktop: false,
   },
@@ -139,6 +142,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     label: 'Copy install command',
     description: 'Copy a documented install command for manual use outside Conductor.',
     browserSafe: true,
+    previewOnly: true,
     executesCommand: false,
     requiresDesktop: false,
   },
@@ -147,6 +151,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     label: 'Configure',
     description: 'Show configuration guidance or a safe preview; no renderer shell execution.',
     browserSafe: true,
+    previewOnly: true,
     executesCommand: false,
     requiresDesktop: false,
   },
@@ -155,6 +160,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     label: 'Health check',
     description: 'Show health-check metadata. Execution requires explicit main-process implementation.',
     browserSafe: true,
+    previewOnly: true,
     executesCommand: false,
     requiresDesktop: false,
   },
@@ -163,6 +169,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     label: 'Preview install',
     description: 'Show trusted installer recipe metadata without running commands.',
     browserSafe: true,
+    previewOnly: true,
     executesCommand: false,
     requiresDesktop: false,
   },
@@ -171,6 +178,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     label: 'Coming soon',
     description: 'Placeholder for functionality that is not implemented.',
     browserSafe: true,
+    previewOnly: true,
     executesCommand: false,
     requiresDesktop: false,
   },
@@ -179,6 +187,7 @@ export const SAFE_ACTION_METADATA: Record<RuntimeActionKind, RuntimeActionMetada
     label: 'Requires desktop',
     description: 'This action depends on the Electron desktop bridge and is unavailable in browser mode.',
     browserSafe: false,
+    previewOnly: false,
     executesCommand: false,
     requiresDesktop: true,
   },

@@ -533,7 +533,7 @@ function LocalToolSection({
             <div className="tool-row-actions">
               {tool.primaryAction && (
                 <span className="chip chip-muted" title={tool.primaryAction.description}>
-                  Primary: {tool.primaryAction.label}
+                  {tool.primaryAction.previewOnly ? 'Suggested preview' : 'Primary'}: {tool.primaryAction.label}
                 </span>
               )}
               {tool.actions.map((action) => (
@@ -542,9 +542,9 @@ function LocalToolSection({
                   disabled={action.disabled}
                   key={`${tool.id}-${action.kind}`}
                   onClick={() => onAction(tool, action)}
-                  title={action.title}
+                  title={action.title ?? action.description}
                 >
-                  {action.label}
+                  {actionButtonLabel(action)}
                 </button>
               ))}
             </div>
@@ -570,7 +570,7 @@ function RuntimeDetailPanel({ tool }: { tool: LocalToolItem }) {
         </div>
         {tool.primaryAction && (
           <span className="chip chip-muted" title={tool.primaryAction.description}>
-            {tool.primaryAction.label}
+            {tool.primaryAction.previewOnly ? 'Preview' : 'Action'}: {tool.primaryAction.label}
           </span>
         )}
       </div>
@@ -589,6 +589,12 @@ function RuntimeDetailPanel({ tool }: { tool: LocalToolItem }) {
       </div>
     </div>
   );
+}
+
+function actionButtonLabel(action: LocalToolAction) {
+  if (!action.previewOnly) return action.label;
+  if (action.label.toLowerCase().startsWith('preview')) return action.label;
+  return `Preview ${action.label.toLowerCase()}`;
 }
 
 function RecipeStepPreview({ steps, empty }: { steps: IntegrationRecipe['install']['steps']; empty: string }) {

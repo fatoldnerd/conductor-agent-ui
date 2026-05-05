@@ -260,6 +260,31 @@ describe('local tool inventory view model', () => {
     expect(runtimes.find((item) => item.id === 'openclaw')?.detailPanel?.summary).toContain('needs config');
   });
 
+  it('keeps runtime next-step actions explicit about preview-only execution', () => {
+    const runtimes = runtimeItems(inventory);
+    const hermes = runtimes.find((item) => item.id === 'hermes');
+    const codex = runtimes.find((item) => item.id === 'codex-cli');
+
+    expect(hermes?.primaryAction).toMatchObject({
+      kind: 'configure',
+      previewOnly: true,
+      executesCommand: false,
+    });
+    expect(codex?.primaryAction).toMatchObject({
+      kind: 'health_check',
+      previewOnly: true,
+      executesCommand: false,
+    });
+    expect(codex?.detailPanel?.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Next safe action', value: 'Health check (preview only)' }),
+    ]));
+    expect(codex?.detailPanel?.nextSteps[0]).toContain('Preview only:');
+    expect(codex?.actions.find((action) => action.kind === 'open_docs')).toMatchObject({
+      previewOnly: false,
+      executesCommand: false,
+    });
+  });
+
   it('keeps runtime detail states distinct without inventing local state', () => {
     const brokenInventory: LocalInventory = {
       ...inventory,

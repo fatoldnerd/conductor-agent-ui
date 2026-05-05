@@ -67,4 +67,23 @@ describe('canonical runtime readiness model', () => {
       requiresDesktop: true,
     });
   });
+
+  it('marks non-executable guidance actions as preview-only explicitly', () => {
+    expect(safeAction('preview_install')).toMatchObject({
+      previewOnly: true,
+      executesCommand: false,
+    });
+    expect(safeAction('configure')).toMatchObject({
+      previewOnly: true,
+      executesCommand: false,
+    });
+    expect(safeAction('health_check')).toMatchObject({
+      previewOnly: true,
+      executesCommand: false,
+    });
+    expect(safeAction('open_docs')).toMatchObject({
+      previewOnly: false,
+      executesCommand: false,
+    });
+  });
 });
