@@ -350,6 +350,35 @@ describe('local tool inventory view model', () => {
     });
   });
 
+  it('renders broken prerequisite diagnostics as broken rather than missing', () => {
+    const categories = buildLocalToolCategories({
+      ...inventory,
+      tools: {
+        pnpm: tool('pnpm', {
+          label: 'pnpm',
+          command: 'pnpm',
+          category: 'developer-prerequisite',
+          available: false,
+          status: 'broken',
+          version: null,
+          diagnosticKind: 'package_manager_shim',
+          error: 'pnpm was found, but its version check failed in a package manager shim. Check Corepack or package-manager configuration, then refresh inventory.',
+        }),
+      },
+      configs: {},
+      services: {},
+    });
+    const pnpm = categories.find((category) => category.id === 'developer-prerequisites')?.items.find((item) => item.id === 'pnpm');
+
+    expect(pnpm).toMatchObject({
+      readiness: 'broken',
+      diagnosis: expect.stringContaining('detected'),
+      detail: 'pnpm was found, but its version check failed in a package manager shim. Check Corepack or package-manager configuration, then refresh inventory.',
+    });
+    expect(pnpm?.detail).not.toContain('/Users/');
+    expect(pnpm?.detail).not.toContain('at ');
+  });
+
   it('represents SSH tunnel or port-in-use services without calling them running', () => {
     const categories = buildLocalToolCategories({
       ...inventory,

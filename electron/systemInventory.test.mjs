@@ -530,4 +530,72 @@ describe('collectLocalInventory', () => {
     expect(inventory.tools.node).toMatchObject({ available: true, version: 'v22.2.0' });
     expect(inventory.tools.npm).toMatchObject({ available: true, version: '10.9.4' });
   });
+
+  it('marks detected package-manager shims as broken with sanitized diagnostics when version checks crash', async () => {
+    const home = '/Users/private-user';
+    const pnpmError = Object.assign(new Error(
+      'Command failed: /opt/homebrew/bin/pnpm --version\n' +
+      'Error: Cannot find matching keyid\n' +
+      '    at verifySignature (/opt/homebrew/Cellar/node/22.11.0/lib/node_modules/corepack/dist/lib/corepack.cjs:21535:47)\n' +
+      '    at async Engine.executePackageManagerRequest (/Users/private-user/.local/share/corepack/corepack.cjs:22882:20)\n' +
+      'TOKEN=secret ssh -N -L example.internal:8642:localhost:8642',
+    ), {
+      code: 1,
+      stdout: '',
+      stderr:
+        'Error: Cannot find matching keyid\n' +
+        '    at verifySignature (/opt/homebrew/Cellar/node/22.11.0/lib/node_modules/corepack/dist/lib/corepack.cjs:21535:47)\n' +
+        '    at async Engine.executePackageManagerRequest (/Users/private-user/.local/share/corepack/corepack.cjs:22882:20)\n',
+    });
+    const commands = {
+      'git --version': ok('git version 2.45.0\n'),
+      '/opt/homebrew/bin/node --version': ok('v22.2.0\n'),
+      '/opt/homebrew/bin/npm --version': ok('10.9.4\n'),
+      '/opt/homebrew/bin/pnpm --version': pnpmError,
+      '/opt/homebrew/bin/python3 --version': ok('Python 3.12.2\n'),
+      '/opt/homebrew/bin/curl --version': ok('curl 8.7.1\n'),
+      '/opt/homebrew/bin/claude --version': ok('2.1.126 (Claude Code)\n'),
+      '/opt/homebrew/bin/codex --version': ok('codex-cli 0.128.0\n'),
+      '/opt/homebrew/bin/gemini --version': ok('0.1.12\n'),
+      'ss -ltnp': missing,
+      'lsof -nP -iTCP -sTCP:LISTEN': ok(''),
+      'ps -eo pid,comm,args': ok(''),
+    };
+
+    const inventory = await collectLocalInventory({
+      homedir: () => home,
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'macbook',
+      release: () => '24.6.0',
+      env: { PATH: '/usr/bin:/bin' },
+      async execFile(command, args = []) {
+        const key = [command, ...args].join(' ');
+        const result = commands[key];
+        if (result instanceof Error) throw result;
+        if (result) return result;
+        throw missing;
+      },
+      async access() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return '';
+      },
+    });
+
+    expect(inventory.tools.pnpm).toMatchObject({
+      available: false,
+      status: 'broken',
+      version: null,
+      diagnosticKind: 'package_manager_shim',
+      error: 'pnpm was found, but its version check failed in a package manager shim. Check Corepack or package-manager configuration, then refresh inventory.',
+    });
+    expect(inventory.tools.pnpm.error).not.toContain('/Users/private-user');
+    expect(inventory.tools.pnpm.error).not.toContain('/opt/homebrew');
+    expect(inventory.tools.pnpm.error).not.toContain('verifySignature');
+    expect(inventory.tools.pnpm.error).not.toContain('TOKEN=secret');
+    expect(inventory.tools.pnpm.error).not.toContain('-L');
+    expect(inventory.tools.pnpm.error).not.toContain('example.internal');
+  });
 });

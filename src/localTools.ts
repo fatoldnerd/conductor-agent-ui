@@ -177,7 +177,7 @@ function runtimeCredentialConfig(inventory: LocalInventory | null, id: string): 
 
 function runtimeDetail(tool: InventoryToolStatus, config?: InventoryConfigStatus): string {
   if (tool.status === 'not_scanned') return 'Awaiting desktop inventory scan';
-  if (tool.status === 'ready' && !tool.available) return tool.error ?? 'Detected check failed';
+  if (tool.status === 'broken' || (tool.status === 'ready' && !tool.available)) return tool.error ?? 'Detected check failed';
   if (!tool.available) return tool.error ?? 'Not found in local PATH';
   if (config && !config.exists) return 'Installed, configuration not detected';
   return tool.version ?? 'Detected';
@@ -189,7 +189,7 @@ function hasAnyCredentialMarker(config?: InventoryConfigStatus): boolean {
 
 function runtimeReadiness(tool: InventoryToolStatus, config?: InventoryConfigStatus, credentials?: InventoryConfigStatus): LocalToolReadiness {
   if (tool.status === 'not_scanned') return 'not_scanned';
-  if (tool.status === 'ready' && !tool.available) return 'broken';
+  if (tool.status === 'broken' || (tool.status === 'ready' && !tool.available)) return 'broken';
   if (!tool.available) return 'missing';
   if (config && !config.exists) return 'needs_config';
   if (credentials?.exists && !hasAnyCredentialMarker(credentials)) return 'needs_credentials';
@@ -344,7 +344,7 @@ function toRuntimeItem(inventory: LocalInventory | null, id: CanonicalRuntimeId)
 function toToolItem(inventory: LocalInventory | null, id: string, categoryId: 'developer-prerequisites' | 'deployment-tools'): LocalToolItem {
   const category = categoryId === 'developer-prerequisites' ? 'developer-prerequisite' : 'deployment-tool';
   const tool = inventory?.tools[id] ?? fallbackInventoryTool(id, category);
-  const readiness = tool.status === 'not_scanned' ? 'not_scanned' : tool.status === 'ready' && !tool.available ? 'broken' : tool.available ? 'installed' : 'missing';
+  const readiness = tool.status === 'not_scanned' ? 'not_scanned' : tool.status === 'broken' || (tool.status === 'ready' && !tool.available) ? 'broken' : tool.available ? 'installed' : 'missing';
   const actions: LocalToolAction[] = [{ ...safeAction('health_check'), disabled: true, title: 'Preview only; no arbitrary command execution from the renderer.' }];
   return {
     id,
@@ -356,7 +356,7 @@ function toToolItem(inventory: LocalInventory | null, id: string, categoryId: 'd
     version: tool.version,
     detail: tool.status === 'not_scanned'
       ? 'Awaiting desktop inventory scan'
-      : tool.status === 'ready' && !tool.available
+      : tool.status === 'broken' || (tool.status === 'ready' && !tool.available)
         ? tool.error ?? 'Detected check failed'
       : tool.available
         ? tool.version ?? 'Detected'

@@ -49,6 +49,25 @@ function firstLine(value) {
   return String(value || '').trim().split('\n').find(Boolean) || null;
 }
 
+function diagnosticKindFor(command, output) {
+  const value = `${command || ''}\n${output || ''}`.toLowerCase();
+  if (value.includes('corepack') || value.includes('package manager')) return 'package_manager_shim';
+  if (value.includes('permission denied') || value.includes('eacces')) return 'permission';
+  if (value.includes('syntaxerror') || value.includes('typeerror') || value.includes('stack trace')) return 'runtime_error';
+  return 'version_check_failed';
+}
+
+function sanitizeDiagnosticSummary(command, output) {
+  const kind = diagnosticKindFor(command, output);
+  if (kind === 'package_manager_shim') {
+    return `${command} was found, but its version check failed in a package manager shim. Check Corepack or package-manager configuration, then refresh inventory.`;
+  }
+  if (kind === 'permission') {
+    return `${command} was found, but Conductor could not run its version check because of local permissions. Fix the local install, then refresh inventory.`;
+  }
+  return `${command} was found, but its version check failed during desktop inventory. Fix the local install, then refresh inventory.`;
+}
+
 const COMMON_COMMAND_DIRS = [
   '/opt/homebrew/bin',
   '/opt/homebrew/sbin',
@@ -122,7 +141,7 @@ async function execTool(deps, command, args = [], extraOptions = {}) {
     maxBuffer: 1024 * 1024,
     ...extraOptions,
   });
-  return { ok: true, stdout: String(stdout || ''), stderr: String(stderr || '') };
+  return { ok: true, found: true, stdout: String(stdout || ''), stderr: String(stderr || '') };
 }
 
 async function resolveViaLoginShell(deps, command) {
@@ -158,6 +177,7 @@ async function runViaLoginShell(deps, command, args = []) {
   } catch (error) {
     return {
       ok: false,
+      found: true,
       stdout: String(error.stdout || ''),
       stderr: String(error.stderr || ''),
       error: isNotFound(error) ? 'not found' : String(error.message || error),
@@ -182,6 +202,7 @@ async function runCommand(deps, command, args = []) {
   } catch (error) {
     const directError = {
       ok: false,
+      found: !isNotFound(error),
       stdout: String(error.stdout || ''),
       stderr: String(error.stderr || ''),
       error: isNotFound(error) ? 'not found' : String(error.message || error),
@@ -197,6 +218,7 @@ async function runCommand(deps, command, args = []) {
         if (!isNotFound(candidateError)) {
           return {
             ok: false,
+            found: true,
             stdout: String(candidateError.stdout || ''),
             stderr: String(candidateError.stderr || ''),
             error: String(candidateError.message || candidateError),
@@ -213,6 +235,8 @@ async function checkTool(deps, spec) {
   const { id, label, command, args, category, recipeId } = spec;
   const result = await runCommand(deps, command, args);
   if (!result.ok) {
+    const detectedButFailed = Boolean(result.found);
+    const errorOutput = `${result.error || ''}\n${result.stderr || ''}\n${result.stdout || ''}`;
     return {
       id,
       label,
@@ -220,9 +244,10 @@ async function checkTool(deps, spec) {
       category,
       recipeId,
       available: false,
-      status: 'missing',
+      status: detectedButFailed ? 'broken' : 'missing',
       version: null,
-      error: result.error,
+      error: detectedButFailed ? sanitizeDiagnosticSummary(command, errorOutput) : result.error,
+      diagnosticKind: detectedButFailed ? diagnosticKindFor(command, errorOutput) : undefined,
     };
   }
   return {
