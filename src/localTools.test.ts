@@ -274,6 +274,12 @@ describe('local tool inventory view model', () => {
       kind: 'health_check',
       previewOnly: true,
       executesCommand: false,
+      approval: expect.objectContaining({
+        mode: 'future_approval_required',
+        executionCapability: 'metadata_only',
+        canExecuteNow: false,
+        userFacingSummary: expect.stringContaining('Runtime readiness is not blocked'),
+      }),
     });
     expect(codex?.detailPanel?.rows).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Next safe action', value: 'Health check (preview only)' }),

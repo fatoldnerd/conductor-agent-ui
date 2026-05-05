@@ -1,5 +1,6 @@
 import type { InventoryConfigStatus, InventoryServiceStatus, InventoryToolStatus, LocalInventory } from './electron';
 import { getIntegrationRecipe, listIntegrationRecipes, type IntegrationHealthCheck, type IntegrationRecipe } from './integrations/recipes';
+import { buildRuntimeActionApproval, type RuntimeActionApprovalPolicy } from './runtimeActionApproval';
 import {
   CANONICAL_RUNTIME_IDS,
   RUNTIME_CATEGORY_LABELS,
@@ -22,6 +23,7 @@ export type LocalToolAction = RuntimeActionMetadata & {
   docsUrl?: string;
   disabled?: boolean;
   title?: string;
+  approval: RuntimeActionApprovalPolicy;
 };
 
 export type LocalRuntimeDetailRow = {
@@ -196,22 +198,26 @@ function runtimeReadiness(tool: InventoryToolStatus, config?: InventoryConfigSta
   return 'ready';
 }
 
+function withApproval(action: RuntimeActionMetadata, extras: Omit<LocalToolAction, keyof RuntimeActionMetadata | 'approval'> = {}): LocalToolAction {
+  return { ...action, ...extras, approval: buildRuntimeActionApproval(action) };
+}
+
 function toolActions(recipe?: IntegrationRecipe, installed = false): LocalToolAction[] {
   const actions: LocalToolAction[] = [];
   if (recipe) {
-    actions.push({ ...safeAction('preview_install', { label: installed ? 'Preview update' : 'Preview install' }), recipeId: recipe.id });
-    actions.push({ ...safeAction('configure'), recipeId: recipe.id });
-    actions.push({ ...safeAction('health_check'), recipeId: recipe.id });
-    actions.push({ ...safeAction('open_docs'), docsUrl: recipe.docsUrl });
+    actions.push(withApproval(safeAction('preview_install', { label: installed ? 'Preview update' : 'Preview install' }), { recipeId: recipe.id }));
+    actions.push(withApproval(safeAction('configure'), { recipeId: recipe.id }));
+    actions.push(withApproval(safeAction('health_check'), { recipeId: recipe.id }));
+    actions.push(withApproval(safeAction('open_docs'), { docsUrl: recipe.docsUrl }));
   } else {
-    actions.push({ ...safeAction('coming_soon', { label: 'Managed externally' }), disabled: true });
+    actions.push(withApproval(safeAction('coming_soon', { label: 'Managed externally' }), { disabled: true }));
   }
   return actions;
 }
 
 function primaryActionFor(readiness: LocalToolReadiness, actions: LocalToolAction[]): LocalToolAction | undefined {
   if (readiness === 'not_scanned') {
-    return { ...safeAction('refresh'), disabled: true, title: 'Use Refresh inventory above to scan from the desktop app.' };
+    return withApproval(safeAction('refresh'), { disabled: true, title: 'Use Refresh inventory above to scan from the desktop app.' });
   }
   if (readiness === 'needs_config' || readiness === 'needs_credentials') {
     return actions.find((action) => action.kind === 'configure') ?? actions.find((action) => !action.disabled);
@@ -359,7 +365,7 @@ function toToolItem(inventory: LocalInventory | null, id: string, categoryId: 'd
   const category = categoryId === 'developer-prerequisites' ? 'developer-prerequisite' : 'deployment-tool';
   const tool = inventory?.tools[id] ?? fallbackInventoryTool(id, category);
   const readiness = tool.status === 'not_scanned' ? 'not_scanned' : tool.status === 'broken' || (tool.status === 'ready' && !tool.available) ? 'broken' : tool.available ? 'installed' : 'missing';
-  const actions: LocalToolAction[] = [{ ...safeAction('health_check'), disabled: true, title: 'Preview only; no arbitrary command execution from the renderer.' }];
+  const actions: LocalToolAction[] = [withApproval(safeAction('health_check'), { disabled: true, title: 'Preview only; no arbitrary command execution from the renderer.' })];
   return {
     id,
     label: tool.label,
@@ -388,8 +394,8 @@ function toToolItem(inventory: LocalInventory | null, id: string, categoryId: 'd
 function toServiceItem(service: InventoryServiceStatus): LocalToolItem {
   const readiness = service.running ? 'running' : 'stopped';
   const actions: LocalToolAction[] = [
-    { ...safeAction('health_check'), disabled: true, title: 'Service health execution is not wired yet.' },
-    { ...safeAction('coming_soon', { label: 'Manage' }), disabled: true, title: 'Start/stop controls require explicit main-process recipes.' },
+    withApproval(safeAction('health_check'), { disabled: true, title: 'Service health execution is not wired yet.' }),
+    withApproval(safeAction('coming_soon', { label: 'Manage' }), { disabled: true, title: 'Start/stop controls require explicit main-process recipes.' }),
   ];
   return {
     id: service.id,
