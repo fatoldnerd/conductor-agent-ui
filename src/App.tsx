@@ -498,10 +498,16 @@ function ActionPreflightDetails({ action }: { action: LocalToolAction }) {
     <div className="install-callout runtime-callout">
       <IconInfo />
       <span>
-        Suggested next step only. No command will run without explicit approval. Expected effect: {action.preflight.expectedEffect} Risk: {action.preflight.riskLevel}. Approval mode: {action.approval.mode}. {action.approval.userFacingSummary}
+        Suggested next step only. No command will run without explicit approval. Expected effect: {action.preflight.expectedEffect} Risk: {action.preflight.riskLevel}. Approval: {approvalModeLabel(action.approval.mode)}. {action.approval.userFacingSummary}
       </span>
     </div>
   );
+}
+
+function approvalModeLabel(mode: LocalToolAction['approval']['mode']) {
+  if (mode === 'future_approval_required') return 'future action would require approval';
+  if (mode === 'blocked_until_desktop_allowlisted') return 'blocked until an allowlisted desktop API exists';
+  return 'not required for this non-mutating preview';
 }
 
 function RuntimeMetric({ label, value }: { label: string; value: number }) {
