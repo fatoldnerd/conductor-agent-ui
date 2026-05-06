@@ -35,6 +35,7 @@ const conductorApi = {
   runtimeActions: {
     getAuditHistory: () => ipcRenderer.invoke('runtimeActions:getAuditHistory'),
     getApprovalQueue: () => ipcRenderer.invoke('runtimeActions:getApprovalQueue'),
+    getApprovalDecisions: () => ipcRenderer.invoke('runtimeActions:getApprovalDecisions'),
   },
 };
 
