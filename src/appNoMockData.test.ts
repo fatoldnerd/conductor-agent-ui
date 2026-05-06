@@ -45,6 +45,9 @@ describe('production operational UI data sources', () => {
     expect(appSource).toContain('runtimeActionApprovalDecisionHistory.empty');
     expect(appSource).toContain('decisionHistoryLoading');
     expect(appSource).toContain('decisionHistoryError');
+    expect(appSource).toContain('window.conductor.runtimeActions.submitApprovalDecision');
+    expect(appSource).toContain('submitRuntimeActionApprovalDecisionFromQueue');
+    expect(appSource).toContain('No command executes from these controls');
     expect(appSource).toContain('No command will run without explicit approval');
     expect(appSource).toContain('readinessLabel(tool.readiness)');
   });
