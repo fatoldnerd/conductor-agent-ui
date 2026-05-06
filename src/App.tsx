@@ -32,6 +32,7 @@ import {
 } from './localTools';
 import { runtimeAvailable } from './agentRuntimeAvailability';
 import { deriveInventoryViewState } from './inventoryViewState';
+import { buildRuntimeActionApprovalQueueViewModel } from './runtimeActionApprovalQueueViewModel';
 import { buildRuntimeActionHistorySourceState } from './runtimeActionHistorySource';
 import type { RuntimeActionAuditPersistenceReadResult } from './runtimeActionAuditPersistence';
 import { readinessLabel } from './runtimeReadiness';
@@ -1120,6 +1121,7 @@ function ActivityView() {
     [desktopAvailable, historyError, historyPersistence],
   );
   const runtimeActionHistory = runtimeActionHistorySource.viewModel;
+  const runtimeActionApprovalQueue = useMemo(() => buildRuntimeActionApprovalQueueViewModel([]), []);
 
   return (
     <div className="local-tools-page">
@@ -1144,6 +1146,30 @@ function ActivityView() {
         <RuntimeMetric label="Pending approval" value={runtimeActionHistory.stats.pendingApproval} />
         <RuntimeMetric label="Blocked" value={runtimeActionHistory.stats.blocked} />
         <RuntimeMetric label="Completed" value={runtimeActionHistory.stats.completed} />
+      </div>
+
+      <div className="card local-tool-section">
+        <div className="section-head compact">
+          <h2>Approval queue</h2>
+          <span className="hint">Non-executing shell · no fake approvals</span>
+        </div>
+        {runtimeActionApprovalQueue.empty ? (
+          <p className="empty-state">{runtimeActionApprovalQueue.emptyBody}</p>
+        ) : (
+          <div className="local-tool-list">
+            {runtimeActionApprovalQueue.entries.map((entry) => (
+              <div className="local-tool-row" key={entry.correlationId}>
+                <span className="status-dot" />
+                <div className="local-tool-main">
+                  <strong>{entry.title}</strong>
+                  <span>{entry.subtitle}</span>
+                  <em>{entry.safetyNote}</em>
+                </div>
+                <span className="chip chip-warn">{entry.riskLabel}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card local-tool-section">
