@@ -28,8 +28,11 @@ describe('production operational UI data sources', () => {
     expect(appSource).toContain('action.approvalWorkflow?.state');
     expect(appSource).toContain('action.approvalWorkflow?.approvalPrompt');
     expect(appSource).toContain('buildRuntimeActionHistorySourceState');
+    expect(appSource).toContain('window.conductor.runtimeActions.getAuditHistory');
     expect(appSource).toContain('runtimeActionHistorySource.status');
     expect(appSource).toContain('runtimeActionHistory.empty');
+    expect(appSource).toContain('historyLoading');
+    expect(appSource).toContain('historyError');
     expect(appSource).toContain('No command will run without explicit approval');
     expect(appSource).toContain('readinessLabel(tool.readiness)');
   });
