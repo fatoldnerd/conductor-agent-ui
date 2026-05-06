@@ -6,6 +6,13 @@ const {
   appendRuntimeActionNativeConfirmationResults,
   setRuntimeActionNativeConfirmationPath,
 } = require('./runtimeActionNativeConfirmationStore.cjs');
+const {
+  appendRuntimeActionAuditEvents,
+  setRuntimeActionAuditLogPath,
+} = require('./runtimeActionAuditStore.cjs');
+const {
+  buildRuntimeActionNativeConfirmationAuditEvent,
+} = require('./runtimeActionNativeConfirmationAuditProjection.cjs');
 
 const CORRELATION_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{2,127}$/;
 const UNSAFE_PATTERNS = [
@@ -142,6 +149,7 @@ async function confirmRuntimeActionNativeConfirmation(payload, deps = {}) {
       : 'Native confirmation cancelled. No action executed.',
   };
   appendRuntimeActionNativeConfirmationResults([result]);
+  appendRuntimeActionAuditEvents([buildRuntimeActionNativeConfirmationAuditEvent(result)]);
   return result;
 }
 
@@ -149,6 +157,7 @@ function setRuntimeActionNativeConfirmationDialogPaths(input) {
   if (!input || typeof input !== 'object') throw new Error('Native confirmation path configuration must be an object');
   if (input.decisionPath) setRuntimeActionApprovalDecisionPath(input.decisionPath);
   if (input.confirmationPath) setRuntimeActionNativeConfirmationPath(input.confirmationPath);
+  if (input.auditPath) setRuntimeActionAuditLogPath(input.auditPath);
 }
 
 module.exports = {
