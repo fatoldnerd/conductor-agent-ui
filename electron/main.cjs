@@ -9,7 +9,7 @@ const {
   readRuntimeActionAuditHistory,
   setRuntimeActionAuditLogPath,
 } = require('./runtimeActionAuditStore.cjs');
-const { readRuntimeActionApprovalQueue } = require('./runtimeActionApprovalQueueStore.cjs');
+const { readRuntimeActionApprovalQueue, setRuntimeActionApprovalQueuePath } = require('./runtimeActionApprovalQueueStore.cjs');
 const {
   createInstallRun,
   getInstallRun,
@@ -311,6 +311,7 @@ ipcMain.handle('agents:getRun', async (event, runId) => {
 app.whenReady().then(() => {
   setAuditLogPath(path.join(app.getPath('userData'), 'install-audit.jsonl'));
   setRuntimeActionAuditLogPath(path.join(app.getPath('userData'), 'runtime-action-audit.jsonl'));
+  setRuntimeActionApprovalQueuePath(path.join(app.getPath('userData'), 'runtime-action-approval-queue.jsonl'));
   createWindow();
 
   app.on('activate', () => {
