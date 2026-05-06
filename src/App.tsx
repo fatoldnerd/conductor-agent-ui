@@ -32,8 +32,13 @@ import {
 } from './localTools';
 import { runtimeAvailable } from './agentRuntimeAvailability';
 import { deriveInventoryViewState } from './inventoryViewState';
+import {
+  buildRuntimeActionApprovalDecisionHistorySourceState,
+  type RuntimeActionApprovalDecisionHistorySourceState,
+} from './runtimeActionApprovalDecisionHistorySource';
 import { buildRuntimeActionApprovalQueueSourceState, type RuntimeActionApprovalQueueReadResult } from './runtimeActionApprovalQueueSource';
 import { buildRuntimeActionHistorySourceState } from './runtimeActionHistorySource';
+import type { RuntimeActionApprovalDecisionReadResult } from './runtimeActionApprovalDecisionPersistence';
 import type { RuntimeActionAuditPersistenceReadResult } from './runtimeActionAuditPersistence';
 import { readinessLabel } from './runtimeReadiness';
 import type {
@@ -1094,6 +1099,9 @@ function ActivityView() {
   const [queueReadResult, setQueueReadResult] = useState<RuntimeActionApprovalQueueReadResult | null>(null);
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
+  const [decisionHistoryReadResult, setDecisionHistoryReadResult] = useState<RuntimeActionApprovalDecisionReadResult | null>(null);
+  const [decisionHistoryLoading, setDecisionHistoryLoading] = useState(false);
+  const [decisionHistoryError, setDecisionHistoryError] = useState<string | null>(null);
 
   const loadRuntimeActionHistory = async () => {
     if (!window.conductor?.runtimeActions) return;
@@ -1125,9 +1133,25 @@ function ActivityView() {
     }
   };
 
+  const loadRuntimeActionApprovalDecisionHistory = async () => {
+    if (!window.conductor?.runtimeActions) return;
+    setDecisionHistoryLoading(true);
+    setDecisionHistoryError(null);
+    try {
+      const decisions = await window.conductor.runtimeActions.getApprovalDecisions();
+      setDecisionHistoryReadResult(decisions as RuntimeActionApprovalDecisionReadResult);
+    } catch {
+      setDecisionHistoryReadResult(null);
+      setDecisionHistoryError('Runtime action approval decision history could not be loaded. Details were redacted for display.');
+    } finally {
+      setDecisionHistoryLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadRuntimeActionHistory();
     loadRuntimeActionApprovalQueue();
+    loadRuntimeActionApprovalDecisionHistory();
   }, []);
 
   const runtimeActionHistorySource = useMemo(
@@ -1150,6 +1174,16 @@ function ActivityView() {
     [desktopAvailable, queueError, queueReadResult],
   );
   const runtimeActionApprovalQueue = runtimeActionApprovalQueueSource.viewModel;
+  const runtimeActionApprovalDecisionHistorySource: RuntimeActionApprovalDecisionHistorySourceState = useMemo(
+    () => buildRuntimeActionApprovalDecisionHistorySourceState({
+      desktopBridgeAvailable: desktopAvailable,
+      sourceKind: decisionHistoryReadResult ? 'electron-local' : undefined,
+      decisions: decisionHistoryReadResult ?? undefined,
+      error: decisionHistoryError,
+    }),
+    [decisionHistoryError, decisionHistoryReadResult, desktopAvailable],
+  );
+  const runtimeActionApprovalDecisionHistory = runtimeActionApprovalDecisionHistorySource.viewModel;
 
   return (
     <div className="local-tools-page">
@@ -1204,6 +1238,46 @@ function ActivityView() {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="card local-tool-section">
+        <div className="section-head compact">
+          <h2>Approval decisions</h2>
+          <span className="hint">
+            {runtimeActionApprovalDecisionHistorySource.status === 'desktop_required'
+              ? 'Desktop required · no fake decisions'
+              : decisionHistoryLoading
+                ? 'Loading approval decisions...'
+                : `${runtimeActionApprovalDecisionHistorySource.sourceKind} · read-only decisions`}
+          </span>
+        </div>
+        {runtimeActionApprovalDecisionHistory.empty ? (
+          <p className="empty-state">{runtimeActionApprovalDecisionHistory.emptyBody}</p>
+        ) : (
+          <div className="local-tool-list">
+            {runtimeActionApprovalDecisionHistory.entries.map((entry) => (
+              <div className="local-tool-row" key={entry.correlationId}>
+                <span className={`status-dot ${entry.tone === 'ok' ? 'ok' : entry.tone === 'warn' ? 'missing' : ''}`} />
+                <div className="local-tool-main">
+                  <strong>{entry.title}</strong>
+                  <span>{entry.subtitle}</span>
+                  <em>{entry.safetyNote}</em>
+                </div>
+                <span className={`chip ${entry.tone === 'ok' ? 'chip-ok' : entry.tone === 'warn' ? 'chip-warn' : 'chip-muted'}`}>{entry.decision}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="actions">
+          <button
+            className="btn-ghost"
+            onClick={loadRuntimeActionApprovalDecisionHistory}
+            disabled={!window.conductor?.runtimeActions || decisionHistoryLoading}
+          >
+            {decisionHistoryLoading ? 'Loading decisions...' : 'Refresh approval decisions'}
+          </button>
+          <span className="hint">Read-only history. {decisionHistoryError ? 'Last read failed safely.' : ''}</span>
+        </div>
       </div>
 
       <div className="card local-tool-section">
