@@ -51,17 +51,26 @@ function appendRuntimeActionApprovalQueueItems(items) {
   return buildReadResult(readItemsFromDisk());
 }
 
-function readRuntimeActionApprovalQueue() {
+function readRuntimeActionApprovalQueue(options = {}) {
   try {
-    if (!fs.existsSync(runtimeActionApprovalQueuePath)) return buildReadResult([]);
-    return buildReadResult(readItemsFromDisk());
+    if (options.decisionReadResult?.status === 'unavailable') return buildUnavailableReadResult();
+
+    if (!fs.existsSync(runtimeActionApprovalQueuePath)) {
+      return buildReadResult([], { totalItemCount: 0, resolvedItemCount: 0 });
+    }
+
+    const storedItems = readItemsFromDisk();
+    const decidedCorrelationIds = collectDecidedCorrelationIds(options.decisionReadResult);
+    const pendingItems = decidedCorrelationIds.size > 0
+      ? storedItems.filter((item) => !decidedCorrelationIds.has(item.correlationId))
+      : storedItems;
+
+    return buildReadResult(pendingItems, {
+      totalItemCount: storedItems.length,
+      resolvedItemCount: storedItems.length - pendingItems.length,
+    });
   } catch {
-    return {
-      schemaVersion: 1,
-      status: 'unavailable',
-      items: [],
-      message: 'Runtime action approval queue storage is unavailable. Details were redacted for display.',
-    };
+    return buildUnavailableReadResult();
   }
 }
 
@@ -85,13 +94,22 @@ function parseQueueItemLine(line) {
   }
 }
 
-function buildReadResult(items) {
+function buildReadResult(items, counts = {}) {
+  const pendingItemCount = items.length;
+  const totalItemCount = Number.isInteger(counts.totalItemCount) ? counts.totalItemCount : items.length;
+  const resolvedItemCount = Number.isInteger(counts.resolvedItemCount) ? counts.resolvedItemCount : 0;
+
   if (items.length === 0) {
     return {
       schemaVersion: 1,
       status: 'empty',
       items: [],
-      message: 'No runtime action approval requests have been recorded yet. Conductor will not show fake approvals.',
+      pendingItemCount,
+      resolvedItemCount,
+      totalItemCount,
+      message: resolvedItemCount > 0
+        ? `No pending runtime action approval requests. ${resolvedItemCount} resolved request${resolvedItemCount === 1 ? '' : 's'} are hidden from the pending queue.`
+        : 'No runtime action approval requests have been recorded yet. Conductor will not show fake approvals.',
     };
   }
 
@@ -99,8 +117,34 @@ function buildReadResult(items) {
     schemaVersion: 1,
     status: 'ready',
     items,
-    message: 'Runtime action approval queue was read from local desktop storage.',
+    pendingItemCount,
+    resolvedItemCount,
+    totalItemCount,
+    message: resolvedItemCount > 0
+      ? 'Runtime action approval queue was read from local desktop storage with resolved decisions hidden from pending display.'
+      : 'Runtime action approval queue was read from local desktop storage with pending requests only.',
   };
+}
+
+function buildUnavailableReadResult() {
+  return {
+    schemaVersion: 1,
+    status: 'unavailable',
+    items: [],
+    pendingItemCount: 0,
+    resolvedItemCount: 0,
+    totalItemCount: 0,
+    message: 'Runtime action approval queue storage is unavailable. Details were redacted for display.',
+  };
+}
+
+function collectDecidedCorrelationIds(decisionReadResult) {
+  if (!decisionReadResult || !Array.isArray(decisionReadResult.decisions)) return new Set();
+  return new Set(
+    decisionReadResult.decisions
+      .map((decision) => decision && typeof decision.correlationId === 'string' ? decision.correlationId : null)
+      .filter(Boolean),
+  );
 }
 
 function assertValidQueueItem(item) {
