@@ -15,6 +15,7 @@ const {
   setRuntimeActionApprovalDecisionPath,
 } = require('./runtimeActionApprovalDecisionStore.cjs');
 const { submitRuntimeActionApprovalDecision } = require('./runtimeActionApprovalDecisionSubmitter.cjs');
+const { confirmRuntimeActionNativeConfirmation } = require('./runtimeActionNativeConfirmationDialog.cjs');
 const {
   createInstallRun,
   getInstallRun,
@@ -277,6 +278,14 @@ ipcMain.handle('runtimeActions:getApprovalDecisions', async (event) => {
 ipcMain.handle('runtimeActions:submitApprovalDecision', async (event, payload) => {
   assertTrustedSender(event);
   return submitRuntimeActionApprovalDecision(payload);
+});
+
+ipcMain.handle('runtimeActions:confirmNativeApprovalDecision', async (event, payload) => {
+  assertTrustedSender(event);
+  return confirmRuntimeActionNativeConfirmation(payload, {
+    parentWindow: BrowserWindow.fromWebContents(event.sender),
+    showMessageBox: dialog.showMessageBox.bind(dialog),
+  });
 });
 
 ipcMain.handle('agents:listRuntimes', async (event) => {

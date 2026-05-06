@@ -37,6 +37,7 @@ const conductorApi = {
     getApprovalQueue: () => ipcRenderer.invoke('runtimeActions:getApprovalQueue'),
     getApprovalDecisions: () => ipcRenderer.invoke('runtimeActions:getApprovalDecisions'),
     submitApprovalDecision: (payload) => ipcRenderer.invoke('runtimeActions:submitApprovalDecision', payload),
+    confirmNativeApprovalDecision: (payload) => ipcRenderer.invoke('runtimeActions:confirmNativeApprovalDecision', payload),
   },
 };
 
