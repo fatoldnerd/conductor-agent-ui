@@ -190,6 +190,13 @@ export type RuntimeActionAuditHistoryReadResult = {
   message: string;
 };
 
+export type RuntimeActionApprovalQueueReadResult = {
+  schemaVersion: 1;
+  status: 'unavailable' | 'empty' | 'ready';
+  items: unknown[];
+  message: string;
+};
+
 declare global {
   interface Window {
     conductor?: {
@@ -218,6 +225,7 @@ declare global {
       };
       runtimeActions: {
         getAuditHistory: () => Promise<RuntimeActionAuditHistoryReadResult>;
+        getApprovalQueue: () => Promise<RuntimeActionApprovalQueueReadResult>;
       };
     };
   }
