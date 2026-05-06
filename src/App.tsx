@@ -1168,7 +1168,8 @@ function ActivityView() {
         decision,
         decidedAt: new Date().toISOString(),
       });
-      setApprovalDecisionSubmitMessage(result.message);
+      if (result.nativeConfirmation.required) await confirmRuntimeActionNativeApprovalDecision(result.correlationId);
+      else setApprovalDecisionSubmitMessage(result.message);
       await loadRuntimeActionApprovalQueue();
       await loadRuntimeActionApprovalDecisionHistory();
     } catch {
@@ -1177,6 +1178,23 @@ function ActivityView() {
       setApprovalDecisionSubmittingId(null);
       setApprovalDecisionSubmittingDecision(null);
     }
+  };
+
+  const confirmRuntimeActionNativeApprovalDecision = async (correlationId: string) => {
+    if (!window.conductor?.runtimeActions.confirmNativeApprovalDecision) {
+      setApprovalDecisionSubmitMessage('Approved decision recorded. Native confirmation requires the desktop bridge. No action executed.');
+      return;
+    }
+    const nativeResult = await window.conductor.runtimeActions.confirmNativeApprovalDecision({ correlationId });
+    if (nativeResult.status === 'confirmed_no_execution') {
+      setApprovalDecisionSubmitMessage('Native confirmation completed. No action executed.');
+      return;
+    }
+    if (nativeResult.status === 'cancelled_no_execution') {
+      setApprovalDecisionSubmitMessage('Native confirmation cancelled. No action executed.');
+      return;
+    }
+    setApprovalDecisionSubmitError('Native confirmation could not continue. No action executed.');
   };
 
   useEffect(() => {

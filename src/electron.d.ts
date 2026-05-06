@@ -230,6 +230,29 @@ export type RuntimeActionApprovalDecisionSubmitResult = {
   message: string;
 };
 
+export type RuntimeActionNativeConfirmationPayload = {
+  correlationId: string;
+};
+
+export type RuntimeActionNativeConfirmationResult = {
+  schemaVersion: 1;
+  status: 'confirmed_no_execution' | 'cancelled_no_execution' | 'invalid';
+  correlationId: string;
+  nativeConfirmation: {
+    required: boolean;
+    shown: boolean;
+    confirmed: boolean;
+    implemented: true;
+    reason: string;
+  };
+  execution: {
+    rendererCanExecute: false;
+    executed: false;
+    reason: string;
+  };
+  message: string;
+};
+
 declare global {
   interface Window {
     conductor?: {
@@ -261,6 +284,7 @@ declare global {
         getApprovalQueue: () => Promise<RuntimeActionApprovalQueueReadResult>;
         getApprovalDecisions: () => Promise<RuntimeActionApprovalDecisionReadResult>;
         submitApprovalDecision: (payload: RuntimeActionApprovalDecisionSubmitPayload) => Promise<RuntimeActionApprovalDecisionSubmitResult>;
+        confirmNativeApprovalDecision: (payload: RuntimeActionNativeConfirmationPayload) => Promise<RuntimeActionNativeConfirmationResult>;
       };
     };
   }

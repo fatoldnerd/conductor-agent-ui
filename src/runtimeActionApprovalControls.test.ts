@@ -25,6 +25,6 @@ describe('runtime action approval controls renderer contract', () => {
     expect(appSource).toContain('disabled={!window.conductor?.runtimeActions.submitApprovalDecision');
     expect(appSource).not.toContain('runtimeActions.execute');
     expect(appSource).not.toContain('runtimeActions.runDesktopApi');
-    expect(appSource).not.toContain('runtimeActions.confirmNative');
+    expect(appSource).not.toContain('executeRuntimeAction');
   });
 });
