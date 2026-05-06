@@ -21,6 +21,9 @@ export type RuntimeActionApprovalQueueReadResult = {
   status: RuntimeActionApprovalQueueReadStatus;
   items: RuntimeActionApprovalQueueItem[];
   message: string;
+  pendingItemCount?: number;
+  resolvedItemCount?: number;
+  totalItemCount?: number;
 };
 
 export type RuntimeActionApprovalQueueSourceInput = {

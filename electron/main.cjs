@@ -265,7 +265,8 @@ ipcMain.handle('runtimeActions:getAuditHistory', async (event) => {
 
 ipcMain.handle('runtimeActions:getApprovalQueue', async (event) => {
   assertTrustedSender(event);
-  return readRuntimeActionApprovalQueue();
+  const decisionReadResult = readRuntimeActionApprovalDecisions();
+  return readRuntimeActionApprovalQueue({ decisionReadResult });
 });
 
 ipcMain.handle('runtimeActions:getApprovalDecisions', async (event) => {
