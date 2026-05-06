@@ -33,6 +33,7 @@ import {
 import { runtimeAvailable } from './agentRuntimeAvailability';
 import { deriveInventoryViewState } from './inventoryViewState';
 import { buildRuntimeActionHistorySourceState } from './runtimeActionHistorySource';
+import type { RuntimeActionAuditPersistenceReadResult } from './runtimeActionAuditPersistence';
 import { readinessLabel } from './runtimeReadiness';
 import type {
   AgentRunEvent,
@@ -1086,9 +1087,37 @@ function DiagnosticsView() {
 
 function ActivityView() {
   const desktopAvailable = Boolean(window.conductor);
+  const [historyPersistence, setHistoryPersistence] = useState<RuntimeActionAuditPersistenceReadResult | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  const loadRuntimeActionHistory = async () => {
+    if (!window.conductor?.runtimeActions) return;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const persistence = await window.conductor.runtimeActions.getAuditHistory();
+      setHistoryPersistence(persistence as RuntimeActionAuditPersistenceReadResult);
+    } catch {
+      setHistoryPersistence(null);
+      setHistoryError('Runtime action history could not be loaded. Details were redacted for display.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRuntimeActionHistory();
+  }, []);
+
   const runtimeActionHistorySource = useMemo(
-    () => buildRuntimeActionHistorySourceState({ desktopBridgeAvailable: desktopAvailable }),
-    [desktopAvailable],
+    () => buildRuntimeActionHistorySourceState({
+      desktopBridgeAvailable: desktopAvailable,
+      sourceKind: historyPersistence ? 'electron-local' : undefined,
+      persistence: historyPersistence ?? undefined,
+      error: historyError,
+    }),
+    [desktopAvailable, historyError, historyPersistence],
   );
   const runtimeActionHistory = runtimeActionHistorySource.viewModel;
 
@@ -1099,10 +1128,14 @@ function ActivityView() {
         <h2>{runtimeActionHistory.empty ? runtimeActionHistory.emptyTitle : 'Runtime action history'}</h2>
         <p>{runtimeActionHistorySource.message}</p>
         <div className="actions">
-          <button className="btn-ghost primary" disabled>
-            {runtimeActionHistorySource.status === 'desktop_required' ? 'Requires desktop bridge' : 'Awaiting real audit events'}
+          <button className="btn-ghost primary" onClick={loadRuntimeActionHistory} disabled={!window.conductor?.runtimeActions || historyLoading}>
+            {runtimeActionHistorySource.status === 'desktop_required'
+              ? 'Requires desktop bridge'
+              : historyLoading
+                ? 'Loading audit history...'
+                : 'Refresh audit history'}
           </button>
-          <span className="hint">No fake live activity is rendered.</span>
+          <span className="hint">No fake live activity is rendered. {historyError ? 'Last read failed safely.' : ''}</span>
         </div>
       </div>
 
