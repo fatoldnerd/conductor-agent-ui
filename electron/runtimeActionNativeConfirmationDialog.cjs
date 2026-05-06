@@ -2,6 +2,10 @@ const {
   readRuntimeActionApprovalDecisions,
   setRuntimeActionApprovalDecisionPath,
 } = require('./runtimeActionApprovalDecisionStore.cjs');
+const {
+  appendRuntimeActionNativeConfirmationResults,
+  setRuntimeActionNativeConfirmationPath,
+} = require('./runtimeActionNativeConfirmationStore.cjs');
 
 const CORRELATION_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{2,127}$/;
 const UNSAFE_PATTERNS = [
@@ -111,11 +115,14 @@ async function confirmRuntimeActionNativeConfirmation(payload, deps = {}) {
 
   const dialogResult = await showMessageBox(deps.parentWindow || null, buildDialogOptions(confirmable.envelope));
   const confirmed = dialogResult && dialogResult.response === 1;
-
-  return {
+  const result = {
     schemaVersion: 1,
     status: confirmed ? 'confirmed_no_execution' : 'cancelled_no_execution',
     correlationId: safePayload.correlationId,
+    confirmedAt: new Date().toISOString(),
+    runtimeId: confirmable.envelope.runtimeId,
+    actionKind: confirmable.envelope.actionKind,
+    source: confirmable.envelope.source,
     nativeConfirmation: {
       required: true,
       shown: true,
@@ -134,11 +141,14 @@ async function confirmRuntimeActionNativeConfirmation(payload, deps = {}) {
       ? 'Native confirmation completed. No action executed.'
       : 'Native confirmation cancelled. No action executed.',
   };
+  appendRuntimeActionNativeConfirmationResults([result]);
+  return result;
 }
 
 function setRuntimeActionNativeConfirmationDialogPaths(input) {
   if (!input || typeof input !== 'object') throw new Error('Native confirmation path configuration must be an object');
   if (input.decisionPath) setRuntimeActionApprovalDecisionPath(input.decisionPath);
+  if (input.confirmationPath) setRuntimeActionNativeConfirmationPath(input.confirmationPath);
 }
 
 module.exports = {

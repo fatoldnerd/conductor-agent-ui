@@ -17,6 +17,10 @@ const {
 const { submitRuntimeActionApprovalDecision } = require('./runtimeActionApprovalDecisionSubmitter.cjs');
 const { confirmRuntimeActionNativeConfirmation } = require('./runtimeActionNativeConfirmationDialog.cjs');
 const {
+  readRuntimeActionNativeConfirmations,
+  setRuntimeActionNativeConfirmationPath,
+} = require('./runtimeActionNativeConfirmationStore.cjs');
+const {
   createInstallRun,
   getInstallRun,
   listAuditEvents,
@@ -288,6 +292,11 @@ ipcMain.handle('runtimeActions:confirmNativeApprovalDecision', async (event, pay
   });
 });
 
+ipcMain.handle('runtimeActions:getNativeConfirmations', async (event) => {
+  assertTrustedSender(event);
+  return readRuntimeActionNativeConfirmations();
+});
+
 ipcMain.handle('agents:listRuntimes', async (event) => {
   assertTrustedSender(event);
   return listAgentRuntimes();
@@ -338,6 +347,7 @@ app.whenReady().then(() => {
   setRuntimeActionAuditLogPath(path.join(app.getPath('userData'), 'runtime-action-audit.jsonl'));
   setRuntimeActionApprovalQueuePath(path.join(app.getPath('userData'), 'runtime-action-approval-queue.jsonl'));
   setRuntimeActionApprovalDecisionPath(path.join(app.getPath('userData'), 'runtime-action-approval-decisions.jsonl'));
+  setRuntimeActionNativeConfirmationPath(path.join(app.getPath('userData'), 'runtime-action-native-confirmations.jsonl'));
   createWindow();
 
   app.on('activate', () => {
