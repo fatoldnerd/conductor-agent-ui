@@ -60,6 +60,43 @@ describe('runtime action approval queue source', () => {
     expect(state.message).toContain('loaded from a trusted desktop source');
   });
 
+  it('adapts read-only approval queue bridge results into source state', () => {
+    const state = buildRuntimeActionApprovalQueueSourceState({
+      desktopBridgeAvailable: true,
+      sourceKind: 'electron-local',
+      queue: {
+        schemaVersion: 1,
+        status: 'ready',
+        items: [queueItem({ correlationId: 'bridge-queue-item' })],
+        message: 'Runtime action approval queue was read from local desktop storage.',
+      },
+    });
+
+    expect(state.status).toBe('ready');
+    expect(state.canRead).toBe(true);
+    expect(state.items.map((item) => item.correlationId)).toEqual(['bridge-queue-item']);
+    expect(state.viewModel.entries.map((entry) => entry.correlationId)).toEqual(['bridge-queue-item']);
+  });
+
+  it('treats unavailable approval queue bridge results as safe source errors', () => {
+    const state = buildRuntimeActionApprovalQueueSourceState({
+      desktopBridgeAvailable: true,
+      sourceKind: 'electron-local',
+      queue: {
+        schemaVersion: 1,
+        status: 'unavailable',
+        items: [],
+        message: 'Raw error /Users/brad/private token=secret',
+      },
+    });
+
+    expect(state.status).toBe('error');
+    expect(state.canRead).toBe(false);
+    expect(state.items).toEqual([]);
+    expect(state.message).toContain('Details were redacted');
+    expect(state.message).not.toContain('/Users/brad/private');
+  });
+
   it('feeds source items into the approval queue view model', () => {
     const state = buildRuntimeActionApprovalQueueSourceState({
       desktopBridgeAvailable: true,

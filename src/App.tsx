@@ -32,7 +32,7 @@ import {
 } from './localTools';
 import { runtimeAvailable } from './agentRuntimeAvailability';
 import { deriveInventoryViewState } from './inventoryViewState';
-import { buildRuntimeActionApprovalQueueSourceState } from './runtimeActionApprovalQueueSource';
+import { buildRuntimeActionApprovalQueueSourceState, type RuntimeActionApprovalQueueReadResult } from './runtimeActionApprovalQueueSource';
 import { buildRuntimeActionHistorySourceState } from './runtimeActionHistorySource';
 import type { RuntimeActionAuditPersistenceReadResult } from './runtimeActionAuditPersistence';
 import { readinessLabel } from './runtimeReadiness';
@@ -1091,6 +1091,9 @@ function ActivityView() {
   const [historyPersistence, setHistoryPersistence] = useState<RuntimeActionAuditPersistenceReadResult | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [queueReadResult, setQueueReadResult] = useState<RuntimeActionApprovalQueueReadResult | null>(null);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueError, setQueueError] = useState<string | null>(null);
 
   const loadRuntimeActionHistory = async () => {
     if (!window.conductor?.runtimeActions) return;
@@ -1107,8 +1110,24 @@ function ActivityView() {
     }
   };
 
+  const loadRuntimeActionApprovalQueue = async () => {
+    if (!window.conductor?.runtimeActions) return;
+    setQueueLoading(true);
+    setQueueError(null);
+    try {
+      const queue = await window.conductor.runtimeActions.getApprovalQueue();
+      setQueueReadResult(queue as RuntimeActionApprovalQueueReadResult);
+    } catch {
+      setQueueReadResult(null);
+      setQueueError('Runtime action approval queue could not be loaded. Details were redacted for display.');
+    } finally {
+      setQueueLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadRuntimeActionHistory();
+    loadRuntimeActionApprovalQueue();
   }, []);
 
   const runtimeActionHistorySource = useMemo(
@@ -1124,10 +1143,11 @@ function ActivityView() {
   const runtimeActionApprovalQueueSource = useMemo(
     () => buildRuntimeActionApprovalQueueSourceState({
       desktopBridgeAvailable: desktopAvailable,
-      sourceKind: desktopAvailable ? 'electron-local' : undefined,
-      items: [],
+      sourceKind: queueReadResult ? 'electron-local' : undefined,
+      queue: queueReadResult ?? undefined,
+      error: queueError,
     }),
-    [desktopAvailable],
+    [desktopAvailable, queueError, queueReadResult],
   );
   const runtimeActionApprovalQueue = runtimeActionApprovalQueueSource.viewModel;
 
@@ -1162,7 +1182,9 @@ function ActivityView() {
           <span className="hint">
             {runtimeActionApprovalQueueSource.status === 'desktop_required'
               ? 'Desktop required · no fake approvals'
-              : `${runtimeActionApprovalQueueSource.sourceKind} · no fake approvals`}
+              : queueLoading
+                ? 'Loading approval queue...'
+                : `${runtimeActionApprovalQueueSource.sourceKind} · no fake approvals`}
           </span>
         </div>
         {runtimeActionApprovalQueue.empty ? (

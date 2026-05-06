@@ -9,6 +9,7 @@ const {
   readRuntimeActionAuditHistory,
   setRuntimeActionAuditLogPath,
 } = require('./runtimeActionAuditStore.cjs');
+const { readRuntimeActionApprovalQueue } = require('./runtimeActionApprovalQueueStore.cjs');
 const {
   createInstallRun,
   getInstallRun,
@@ -255,6 +256,11 @@ ipcMain.handle('integrations:listAuditEvents', async (event, runId) => {
 ipcMain.handle('runtimeActions:getAuditHistory', async (event) => {
   assertTrustedSender(event);
   return readRuntimeActionAuditHistory();
+});
+
+ipcMain.handle('runtimeActions:getApprovalQueue', async (event) => {
+  assertTrustedSender(event);
+  return readRuntimeActionApprovalQueue();
 });
 
 ipcMain.handle('agents:listRuntimes', async (event) => {

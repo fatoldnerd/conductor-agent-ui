@@ -14,10 +14,20 @@ export type RuntimeActionApprovalQueueSourceState = {
   viewModel: RuntimeActionApprovalQueueViewModel;
 };
 
+export type RuntimeActionApprovalQueueReadStatus = 'unavailable' | 'empty' | 'ready';
+
+export type RuntimeActionApprovalQueueReadResult = {
+  schemaVersion: 1;
+  status: RuntimeActionApprovalQueueReadStatus;
+  items: RuntimeActionApprovalQueueItem[];
+  message: string;
+};
+
 export type RuntimeActionApprovalQueueSourceInput = {
   desktopBridgeAvailable: boolean;
   sourceKind?: RuntimeActionApprovalQueueSourceKind;
   items?: RuntimeActionApprovalQueueItem[];
+  queue?: RuntimeActionApprovalQueueReadResult;
   error?: string | null;
 };
 
@@ -90,7 +100,15 @@ export function buildRuntimeActionApprovalQueueSourceState(
     );
   }
 
-  const items = normalizeRuntimeActionApprovalQueueSourceItems(input.items ?? []);
+  if (input.queue?.status === 'unavailable') {
+    return emptySource(
+      'error',
+      sourceKind,
+      'Runtime action approval queue source is unavailable. Details were redacted for display.',
+    );
+  }
+
+  const items = normalizeRuntimeActionApprovalQueueSourceItems(input.queue?.items ?? input.items ?? []);
   return {
     schemaVersion: 1,
     status: 'ready',
