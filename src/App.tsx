@@ -48,6 +48,7 @@ import type {
   AgentRuntimeId,
   IntegrationInstallRun,
   LocalInventory,
+  RuntimeActionApprovalDecisionSubmitPayload,
 } from './electron';
 
 type View = 'dashboard' | 'agents' | 'teams' | 'workflows' | 'tools' | 'console' | 'integrations' | 'activity' | 'diagnostics';
@@ -1102,6 +1103,10 @@ function ActivityView() {
   const [decisionHistoryReadResult, setDecisionHistoryReadResult] = useState<RuntimeActionApprovalDecisionReadResult | null>(null);
   const [decisionHistoryLoading, setDecisionHistoryLoading] = useState(false);
   const [decisionHistoryError, setDecisionHistoryError] = useState<string | null>(null);
+  const [approvalDecisionSubmittingId, setApprovalDecisionSubmittingId] = useState<string | null>(null);
+  const [approvalDecisionSubmittingDecision, setApprovalDecisionSubmittingDecision] = useState<RuntimeActionApprovalDecisionSubmitPayload['decision'] | null>(null);
+  const [approvalDecisionSubmitError, setApprovalDecisionSubmitError] = useState<string | null>(null);
+  const [approvalDecisionSubmitMessage, setApprovalDecisionSubmitMessage] = useState<string | null>(null);
 
   const loadRuntimeActionHistory = async () => {
     if (!window.conductor?.runtimeActions) return;
@@ -1145,6 +1150,32 @@ function ActivityView() {
       setDecisionHistoryError('Runtime action approval decision history could not be loaded. Details were redacted for display.');
     } finally {
       setDecisionHistoryLoading(false);
+    }
+  };
+
+  const submitRuntimeActionApprovalDecisionFromQueue = async (
+    correlationId: string,
+    decision: RuntimeActionApprovalDecisionSubmitPayload['decision'],
+  ) => {
+    if (!window.conductor?.runtimeActions.submitApprovalDecision) return;
+    setApprovalDecisionSubmittingId(correlationId);
+    setApprovalDecisionSubmittingDecision(decision);
+    setApprovalDecisionSubmitError(null);
+    setApprovalDecisionSubmitMessage(null);
+    try {
+      const result = await window.conductor.runtimeActions.submitApprovalDecision({
+        correlationId,
+        decision,
+        decidedAt: new Date().toISOString(),
+      });
+      setApprovalDecisionSubmitMessage(result.message);
+      await loadRuntimeActionApprovalQueue();
+      await loadRuntimeActionApprovalDecisionHistory();
+    } catch {
+      setApprovalDecisionSubmitError('Approval decision could not be submitted. Details were redacted for display.');
+    } finally {
+      setApprovalDecisionSubmittingId(null);
+      setApprovalDecisionSubmittingDecision(null);
     }
   };
 
@@ -1225,19 +1256,50 @@ function ActivityView() {
           <p className="empty-state">{runtimeActionApprovalQueue.emptyBody}</p>
         ) : (
           <div className="local-tool-list">
-            {runtimeActionApprovalQueue.entries.map((entry) => (
-              <div className="local-tool-row" key={entry.correlationId}>
-                <span className="status-dot" />
-                <div className="local-tool-main">
-                  <strong>{entry.title}</strong>
-                  <span>{entry.subtitle}</span>
-                  <em>{entry.safetyNote}</em>
+            {runtimeActionApprovalQueue.entries.map((entry) => {
+              const isSubmittingThisDecision = approvalDecisionSubmittingId === entry.correlationId;
+              return (
+                <div className="local-tool-row" key={entry.correlationId}>
+                  <span className="status-dot" />
+                  <div className="local-tool-main">
+                    <strong>{entry.title}</strong>
+                    <span>{entry.subtitle}</span>
+                    <em>{entry.safetyNote}</em>
+                  </div>
+                  <span className="chip chip-warn">{entry.riskLabel}</span>
+                  <div className="actions compact-actions">
+                    <button
+                      className="btn-ghost primary"
+                      onClick={() => submitRuntimeActionApprovalDecisionFromQueue(entry.correlationId, 'approved')}
+                      disabled={!window.conductor?.runtimeActions.submitApprovalDecision || isSubmittingThisDecision || queueLoading}
+                    >
+                      {isSubmittingThisDecision && approvalDecisionSubmittingDecision === 'approved' ? 'Approving...' : 'Approve'}
+                    </button>
+                    <button
+                      className="btn-ghost"
+                      onClick={() => submitRuntimeActionApprovalDecisionFromQueue(entry.correlationId, 'rejected')}
+                      disabled={!window.conductor?.runtimeActions.submitApprovalDecision || isSubmittingThisDecision || queueLoading}
+                    >
+                      {isSubmittingThisDecision && approvalDecisionSubmittingDecision === 'rejected' ? 'Rejecting...' : 'Reject'}
+                    </button>
+                  </div>
                 </div>
-                <span className="chip chip-warn">{entry.riskLabel}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
+        <div className="actions">
+          <button
+            className="btn-ghost"
+            onClick={loadRuntimeActionApprovalQueue}
+            disabled={!window.conductor?.runtimeActions || queueLoading || Boolean(approvalDecisionSubmittingId)}
+          >
+            {queueLoading ? 'Loading approval queue...' : 'Refresh approval queue'}
+          </button>
+          <span className="hint">
+            No command executes from these controls. Approved items still require future native confirmation. {approvalDecisionSubmitError ? 'Last submit failed safely.' : approvalDecisionSubmitMessage ? 'Last decision recorded.' : ''}
+          </span>
+        </div>
       </div>
 
       <div className="card local-tool-section">
