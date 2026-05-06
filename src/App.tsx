@@ -32,7 +32,7 @@ import {
 } from './localTools';
 import { runtimeAvailable } from './agentRuntimeAvailability';
 import { deriveInventoryViewState } from './inventoryViewState';
-import { buildRuntimeActionApprovalQueueViewModel } from './runtimeActionApprovalQueueViewModel';
+import { buildRuntimeActionApprovalQueueSourceState } from './runtimeActionApprovalQueueSource';
 import { buildRuntimeActionHistorySourceState } from './runtimeActionHistorySource';
 import type { RuntimeActionAuditPersistenceReadResult } from './runtimeActionAuditPersistence';
 import { readinessLabel } from './runtimeReadiness';
@@ -1121,7 +1121,15 @@ function ActivityView() {
     [desktopAvailable, historyError, historyPersistence],
   );
   const runtimeActionHistory = runtimeActionHistorySource.viewModel;
-  const runtimeActionApprovalQueue = useMemo(() => buildRuntimeActionApprovalQueueViewModel([]), []);
+  const runtimeActionApprovalQueueSource = useMemo(
+    () => buildRuntimeActionApprovalQueueSourceState({
+      desktopBridgeAvailable: desktopAvailable,
+      sourceKind: desktopAvailable ? 'electron-local' : undefined,
+      items: [],
+    }),
+    [desktopAvailable],
+  );
+  const runtimeActionApprovalQueue = runtimeActionApprovalQueueSource.viewModel;
 
   return (
     <div className="local-tools-page">
@@ -1151,7 +1159,11 @@ function ActivityView() {
       <div className="card local-tool-section">
         <div className="section-head compact">
           <h2>Approval queue</h2>
-          <span className="hint">Non-executing shell · no fake approvals</span>
+          <span className="hint">
+            {runtimeActionApprovalQueueSource.status === 'desktop_required'
+              ? 'Desktop required · no fake approvals'
+              : `${runtimeActionApprovalQueueSource.sourceKind} · no fake approvals`}
+          </span>
         </div>
         {runtimeActionApprovalQueue.empty ? (
           <p className="empty-state">{runtimeActionApprovalQueue.emptyBody}</p>
