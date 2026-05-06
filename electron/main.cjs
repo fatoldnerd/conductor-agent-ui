@@ -14,6 +14,7 @@ const {
   readRuntimeActionApprovalDecisions,
   setRuntimeActionApprovalDecisionPath,
 } = require('./runtimeActionApprovalDecisionStore.cjs');
+const { submitRuntimeActionApprovalDecision } = require('./runtimeActionApprovalDecisionSubmitter.cjs');
 const {
   createInstallRun,
   getInstallRun,
@@ -270,6 +271,11 @@ ipcMain.handle('runtimeActions:getApprovalQueue', async (event) => {
 ipcMain.handle('runtimeActions:getApprovalDecisions', async (event) => {
   assertTrustedSender(event);
   return readRuntimeActionApprovalDecisions();
+});
+
+ipcMain.handle('runtimeActions:submitApprovalDecision', async (event, payload) => {
+  assertTrustedSender(event);
+  return submitRuntimeActionApprovalDecision(payload);
 });
 
 ipcMain.handle('agents:listRuntimes', async (event) => {

@@ -204,6 +204,32 @@ export type RuntimeActionApprovalDecisionReadResult = {
   message: string;
 };
 
+export type RuntimeActionApprovalDecisionSubmitPayload = {
+  correlationId: string;
+  decision: 'approved' | 'rejected' | 'cancelled';
+  decidedAt?: string;
+  note?: string;
+};
+
+export type RuntimeActionApprovalDecisionSubmitResult = {
+  schemaVersion: 1;
+  status: 'accepted_for_native_confirmation' | 'rejected' | 'cancelled';
+  correlationId: string;
+  decision: unknown;
+  execution: {
+    rendererCanExecute: false;
+    requiresNativeConfirmation: boolean;
+    desktopApi: string | null;
+    reason: string;
+  };
+  nativeConfirmation: {
+    required: boolean;
+    implemented: false;
+    reason: string;
+  };
+  message: string;
+};
+
 declare global {
   interface Window {
     conductor?: {
@@ -234,6 +260,7 @@ declare global {
         getAuditHistory: () => Promise<RuntimeActionAuditHistoryReadResult>;
         getApprovalQueue: () => Promise<RuntimeActionApprovalQueueReadResult>;
         getApprovalDecisions: () => Promise<RuntimeActionApprovalDecisionReadResult>;
+        submitApprovalDecision: (payload: RuntimeActionApprovalDecisionSubmitPayload) => Promise<RuntimeActionApprovalDecisionSubmitResult>;
       };
     };
   }
