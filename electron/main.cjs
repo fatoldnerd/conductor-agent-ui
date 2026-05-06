@@ -6,6 +6,10 @@ const { promisify } = require('node:util');
 const { listIntegrationRecipes, planIntegrationInstall } = require('./integrationRecipes.cjs');
 const { collectLocalInventory } = require('./systemInventory.cjs');
 const {
+  readRuntimeActionAuditHistory,
+  setRuntimeActionAuditLogPath,
+} = require('./runtimeActionAuditStore.cjs');
+const {
   createInstallRun,
   getInstallRun,
   listAuditEvents,
@@ -250,12 +254,7 @@ ipcMain.handle('integrations:listAuditEvents', async (event, runId) => {
 
 ipcMain.handle('runtimeActions:getAuditHistory', async (event) => {
   assertTrustedSender(event);
-  return {
-    schemaVersion: 1,
-    status: 'unavailable',
-    events: [],
-    message: 'Runtime action audit persistence is not connected yet. Conductor will not show fake history.',
-  };
+  return readRuntimeActionAuditHistory();
 });
 
 ipcMain.handle('agents:listRuntimes', async (event) => {
@@ -305,6 +304,7 @@ ipcMain.handle('agents:getRun', async (event, runId) => {
 
 app.whenReady().then(() => {
   setAuditLogPath(path.join(app.getPath('userData'), 'install-audit.jsonl'));
+  setRuntimeActionAuditLogPath(path.join(app.getPath('userData'), 'runtime-action-audit.jsonl'));
   createWindow();
 
   app.on('activate', () => {
