@@ -47,6 +47,10 @@ describe('production operational UI data sources', () => {
     expect(appSource).toContain('decisionHistoryError');
     expect(appSource).toContain('window.conductor.runtimeActions.submitApprovalDecision');
     expect(appSource).toContain('submitRuntimeActionApprovalDecisionFromQueue');
+    expect(appSource).toContain('buildRuntimeActionNativeConfirmationHistorySourceState');
+    expect(appSource).toContain('window.conductor.runtimeActions.getNativeConfirmations');
+    expect(appSource).toContain('runtimeActionNativeConfirmationHistorySource.status');
+    expect(appSource).toContain('No action executed from native confirmation');
     expect(appSource).toContain('No command executes from these controls');
     expect(appSource).toContain('No command will run without explicit approval');
     expect(appSource).toContain('readinessLabel(tool.readiness)');

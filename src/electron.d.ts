@@ -238,6 +238,10 @@ export type RuntimeActionNativeConfirmationResult = {
   schemaVersion: 1;
   status: 'confirmed_no_execution' | 'cancelled_no_execution' | 'invalid';
   correlationId: string;
+  confirmedAt?: string;
+  runtimeId?: string;
+  actionKind?: string;
+  source?: string;
   nativeConfirmation: {
     required: boolean;
     shown: boolean;
@@ -250,6 +254,13 @@ export type RuntimeActionNativeConfirmationResult = {
     executed: false;
     reason: string;
   };
+  message: string;
+};
+
+export type RuntimeActionNativeConfirmationReadResult = {
+  schemaVersion: 1;
+  status: 'unavailable' | 'empty' | 'ready';
+  confirmations: unknown[];
   message: string;
 };
 
@@ -285,6 +296,7 @@ declare global {
         getApprovalDecisions: () => Promise<RuntimeActionApprovalDecisionReadResult>;
         submitApprovalDecision: (payload: RuntimeActionApprovalDecisionSubmitPayload) => Promise<RuntimeActionApprovalDecisionSubmitResult>;
         confirmNativeApprovalDecision: (payload: RuntimeActionNativeConfirmationPayload) => Promise<RuntimeActionNativeConfirmationResult>;
+        getNativeConfirmations: () => Promise<RuntimeActionNativeConfirmationReadResult>;
       };
     };
   }

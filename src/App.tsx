@@ -37,9 +37,14 @@ import {
   type RuntimeActionApprovalDecisionHistorySourceState,
 } from './runtimeActionApprovalDecisionHistorySource';
 import { buildRuntimeActionApprovalQueueSourceState, type RuntimeActionApprovalQueueReadResult } from './runtimeActionApprovalQueueSource';
+import {
+  buildRuntimeActionNativeConfirmationHistorySourceState,
+  type RuntimeActionNativeConfirmationHistorySourceState,
+} from './runtimeActionNativeConfirmationHistorySource';
 import { buildRuntimeActionHistorySourceState } from './runtimeActionHistorySource';
 import type { RuntimeActionApprovalDecisionReadResult } from './runtimeActionApprovalDecisionPersistence';
 import type { RuntimeActionAuditPersistenceReadResult } from './runtimeActionAuditPersistence';
+import type { RuntimeActionNativeConfirmationReadResult } from './electron';
 import { readinessLabel } from './runtimeReadiness';
 import type {
   AgentRunEvent,
@@ -1103,6 +1108,9 @@ function ActivityView() {
   const [decisionHistoryReadResult, setDecisionHistoryReadResult] = useState<RuntimeActionApprovalDecisionReadResult | null>(null);
   const [decisionHistoryLoading, setDecisionHistoryLoading] = useState(false);
   const [decisionHistoryError, setDecisionHistoryError] = useState<string | null>(null);
+  const [nativeConfirmationReadResult, setNativeConfirmationReadResult] = useState<RuntimeActionNativeConfirmationReadResult | null>(null);
+  const [nativeConfirmationLoading, setNativeConfirmationLoading] = useState(false);
+  const [nativeConfirmationError, setNativeConfirmationError] = useState<string | null>(null);
   const [approvalDecisionSubmittingId, setApprovalDecisionSubmittingId] = useState<string | null>(null);
   const [approvalDecisionSubmittingDecision, setApprovalDecisionSubmittingDecision] = useState<RuntimeActionApprovalDecisionSubmitPayload['decision'] | null>(null);
   const [approvalDecisionSubmitError, setApprovalDecisionSubmitError] = useState<string | null>(null);
@@ -1153,6 +1161,21 @@ function ActivityView() {
     }
   };
 
+  const loadRuntimeActionNativeConfirmationHistory = async () => {
+    if (!window.conductor?.runtimeActions.getNativeConfirmations) return;
+    setNativeConfirmationLoading(true);
+    setNativeConfirmationError(null);
+    try {
+      const confirmations = await window.conductor.runtimeActions.getNativeConfirmations();
+      setNativeConfirmationReadResult(confirmations);
+    } catch {
+      setNativeConfirmationReadResult(null);
+      setNativeConfirmationError('Runtime action native confirmation history could not be loaded. Details were redacted for display.');
+    } finally {
+      setNativeConfirmationLoading(false);
+    }
+  };
+
   const submitRuntimeActionApprovalDecisionFromQueue = async (
     correlationId: string,
     decision: RuntimeActionApprovalDecisionSubmitPayload['decision'],
@@ -1172,6 +1195,7 @@ function ActivityView() {
       else setApprovalDecisionSubmitMessage(result.message);
       await loadRuntimeActionApprovalQueue();
       await loadRuntimeActionApprovalDecisionHistory();
+      await loadRuntimeActionNativeConfirmationHistory();
     } catch {
       setApprovalDecisionSubmitError('Approval decision could not be submitted. Details were redacted for display.');
     } finally {
@@ -1201,6 +1225,7 @@ function ActivityView() {
     loadRuntimeActionHistory();
     loadRuntimeActionApprovalQueue();
     loadRuntimeActionApprovalDecisionHistory();
+    loadRuntimeActionNativeConfirmationHistory();
   }, []);
 
   const runtimeActionHistorySource = useMemo(
@@ -1233,6 +1258,16 @@ function ActivityView() {
     [decisionHistoryError, decisionHistoryReadResult, desktopAvailable],
   );
   const runtimeActionApprovalDecisionHistory = runtimeActionApprovalDecisionHistorySource.viewModel;
+  const runtimeActionNativeConfirmationHistorySource: RuntimeActionNativeConfirmationHistorySourceState = useMemo(
+    () => buildRuntimeActionNativeConfirmationHistorySourceState({
+      desktopBridgeAvailable: desktopAvailable,
+      sourceKind: nativeConfirmationReadResult ? 'electron-local' : undefined,
+      confirmations: nativeConfirmationReadResult ?? undefined,
+      error: nativeConfirmationError,
+    }),
+    [desktopAvailable, nativeConfirmationError, nativeConfirmationReadResult],
+  );
+  const runtimeActionNativeConfirmationHistory = runtimeActionNativeConfirmationHistorySource.viewModel;
 
   return (
     <div className="local-tools-page">
@@ -1357,6 +1392,46 @@ function ActivityView() {
             {decisionHistoryLoading ? 'Loading decisions...' : 'Refresh approval decisions'}
           </button>
           <span className="hint">Read-only history. {decisionHistoryError ? 'Last read failed safely.' : ''}</span>
+        </div>
+      </div>
+
+      <div className="card local-tool-section">
+        <div className="section-head compact">
+          <h2>Native confirmations</h2>
+          <span className="hint">
+            {runtimeActionNativeConfirmationHistorySource.status === 'desktop_required'
+              ? 'Desktop required · no fake confirmations'
+              : nativeConfirmationLoading
+                ? 'Loading native confirmations...'
+                : `${runtimeActionNativeConfirmationHistorySource.sourceKind} · no action executed`}
+          </span>
+        </div>
+        {runtimeActionNativeConfirmationHistory.empty ? (
+          <p className="empty-state">{runtimeActionNativeConfirmationHistory.emptyBody}</p>
+        ) : (
+          <div className="local-tool-list">
+            {runtimeActionNativeConfirmationHistory.entries.map((entry) => (
+              <div className="local-tool-row" key={entry.correlationId}>
+                <span className={`status-dot ${entry.tone === 'ok' ? 'ok' : entry.tone === 'warn' ? 'missing' : ''}`} />
+                <div className="local-tool-main">
+                  <strong>{entry.title}</strong>
+                  <span>{entry.subtitle}</span>
+                  <em>{entry.executionNote}</em>
+                </div>
+                <span className={`chip ${entry.tone === 'ok' ? 'chip-ok' : entry.tone === 'warn' ? 'chip-warn' : 'chip-muted'}`}>{entry.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="actions">
+          <button
+            className="btn-ghost"
+            onClick={loadRuntimeActionNativeConfirmationHistory}
+            disabled={!window.conductor?.runtimeActions || nativeConfirmationLoading}
+          >
+            {nativeConfirmationLoading ? 'Loading native confirmations...' : 'Refresh native confirmations'}
+          </button>
+          <span className="hint">No action executed from native confirmation. {nativeConfirmationError ? 'Last read failed safely.' : ''}</span>
         </div>
       </div>
 
