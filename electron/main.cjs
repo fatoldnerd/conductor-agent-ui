@@ -6,6 +6,7 @@ const { promisify } = require('node:util');
 const { listIntegrationRecipes, planIntegrationInstall } = require('./integrationRecipes.cjs');
 const { collectLocalInventory } = require('./systemInventory.cjs');
 const { executeAllowlistedRuntimeAction } = require('./runtimeActionHandlerRegistry.cjs');
+const { inspectRepoReadinessMission } = require('./missionReadinessInspector.cjs');
 const {
   readRuntimeActionAuditHistory,
   setRuntimeActionAuditLogPath,
@@ -325,6 +326,11 @@ ipcMain.handle('runtimeActions:runHealthCheck', async (event, payload) => {
     runtimeId: payload?.runtimeId,
     healthCheckId: payload?.healthCheckId,
   });
+});
+
+ipcMain.handle('missions:inspectRepoReadiness', async (event, payload) => {
+  assertTrustedSender(event);
+  return inspectRepoReadinessMission({ projectPath: payload?.projectPath });
 });
 
 ipcMain.handle('agents:listRuntimes', async (event) => {

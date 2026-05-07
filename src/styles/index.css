@@ -1363,7 +1363,8 @@ a {
   font-weight: 700;
   font-size: 13px;
 }
-.mission-panel textarea {
+.mission-panel textarea,
+.mission-path-input {
   width: 100%;
   min-height: 136px;
   resize: vertical;
@@ -1374,6 +1375,11 @@ a {
   padding: 12px;
   font: inherit;
   box-sizing: border-box;
+}
+.mission-path-input {
+  min-height: auto;
+  resize: none;
+  color: var(--text);
 }
 .mission-goal-panel,
 .mission-timeline-panel {
@@ -1386,7 +1392,8 @@ a {
 }
 .mission-readiness-row,
 .mission-approval-box,
-.mission-empty-timeline {
+.mission-empty-timeline,
+.mission-result-box {
   display: grid;
   grid-template-columns: 10px minmax(0, 1fr);
   gap: 10px;
@@ -1397,20 +1404,23 @@ a {
   background: rgba(15, 23, 42, 0.45);
 }
 .mission-approval-box,
-.mission-empty-timeline {
+.mission-empty-timeline,
+.mission-result-box {
   grid-template-columns: minmax(0, 1fr);
   margin-top: 12px;
 }
 .mission-readiness-row strong,
 .mission-approval-box strong,
-.mission-empty-timeline strong {
+.mission-empty-timeline strong,
+.mission-result-box strong {
   display: block;
   color: var(--text);
   font-size: 13px;
 }
 .mission-readiness-row span:not(.status-dot),
 .mission-approval-box span,
-.mission-empty-timeline span {
+.mission-empty-timeline span,
+.mission-result-box span {
   display: block;
   margin-top: 3px;
   color: var(--text-dim);

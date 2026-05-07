@@ -310,6 +310,32 @@ export type RuntimeActionHealthCheckResult = {
   message: string;
 };
 
+export type MissionRepoReadinessResult = {
+  schemaVersion: 1;
+  status: 'succeeded' | 'failed';
+  desktopApi: 'mission.inspectRepoReadiness';
+  missionType: 'repo_readiness_inspection';
+  correlationId: string;
+  repoName: string;
+  projectPathLabel: string;
+  rendererCanExecuteArbitraryActions: false;
+  executedShell: false;
+  commandAllowlist: [];
+  readOnly: true;
+  allowlistedMetadataFiles: string[];
+  summary: {
+    hasGitRepository: boolean;
+    packageManager: string;
+    hasPackageJson: boolean;
+    hasTestScript: boolean;
+    hasBuildScript: boolean;
+    hasReadme: boolean;
+    readiness: 'ready_for_read_only_agent_review' | 'needs_attention_before_agent_review';
+    riskNotes: string[];
+  };
+  message: string;
+};
+
 declare global {
   interface Window {
     conductor?: {
@@ -346,6 +372,9 @@ declare global {
         refreshInventory: () => Promise<RuntimeActionRefreshInventoryResult>;
         openDocumentation: (docsTarget: string) => Promise<RuntimeActionOpenDocumentationResult>;
         runHealthCheck: (runtimeId: string, healthCheckId: string) => Promise<RuntimeActionHealthCheckResult>;
+      };
+      missions: {
+        inspectRepoReadiness: (projectPath: string) => Promise<MissionRepoReadinessResult>;
       };
     };
   }

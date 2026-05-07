@@ -47,6 +47,7 @@ import { readinessLabel } from './runtimeReadiness';
 import type {
   IntegrationInstallRun,
   LocalInventory,
+  MissionRepoReadinessResult,
   RuntimeActionApprovalDecisionSubmitPayload,
 } from './electron';
 
@@ -361,39 +362,90 @@ function TeamsView() {
 /* -------------------------------------------------------------- Workflow view */
 
 function MissionControlView() {
+  const desktopAvailable = Boolean(window.conductor);
+  const [missionRepoPath, setMissionRepoPath] = useState('');
+  const [missionInspecting, setMissionInspecting] = useState(false);
+  const [missionResult, setMissionResult] = useState<MissionRepoReadinessResult | null>(null);
+  const [missionError, setMissionError] = useState<string | null>(null);
+
+  const inspectRepoReadiness = async () => {
+    if (!window.conductor?.missions?.inspectRepoReadiness) return;
+    setMissionInspecting(true);
+    setMissionError(null);
+    setMissionResult(null);
+    try {
+      const result = await window.conductor.missions.inspectRepoReadiness(missionRepoPath);
+      if (result.rendererCanExecuteArbitraryActions || result.executedShell) {
+        throw new Error('Mission bridge returned an unsafe execution result');
+      }
+      setMissionResult(result);
+    } catch {
+      setMissionError('Read-only repo inspection failed safely. No commands were executed.');
+    } finally {
+      setMissionInspecting(false);
+    }
+  };
+
   return (
     <div className="mission-control-page">
       <div className="card mission-hero">
         <span className="eyebrow">Mission Control</span>
-        <h2>No mission execution engine connected yet</h2>
+        <h2>First mission type: read-only repo readiness</h2>
         <p>
           Mission Control is the plain-English orchestration layer for goals, approvals, progress, and deliverables.
-          This shell is intentionally non-executing. No fake missions are rendered, no agent work is started, and no
-          command surface exists behind the Create Mission button.
+          The first real mission type is intentionally constrained: it can inspect allowlisted repository metadata,
+          produce a readiness summary, and write an audit event. No fake missions are rendered, no agent work is started,
+          and no command surface exists behind the Create Mission button.
         </p>
         <div className="actions">
           <button className="btn-ghost primary" disabled>Create mission disabled</button>
-          <span className="hint">Mission execution is parked until an allowlisted local mission runner exists.</span>
+          <span className="hint">Agent execution remains parked until an allowlisted local mission runner exists.</span>
         </div>
       </div>
 
       <div className="mission-shell-grid">
         <section className="card mission-panel mission-goal-panel">
-          <span className="eyebrow">Mission goal</span>
-          <label htmlFor="mission-goal-input">What should the agents accomplish?</label>
-          <textarea
-            id="mission-goal-input"
-            placeholder="Example: inspect this repo and summarize readiness. Mission runner not connected yet."
-            disabled
+          <span className="eyebrow">Read-only repo readiness inspection</span>
+          <label htmlFor="mission-repo-path-input">Local repository path</label>
+          <input
+            id="mission-repo-path-input"
+            className="mission-path-input"
+            value={missionRepoPath}
+            onChange={(event) => setMissionRepoPath(event.target.value)}
+            placeholder="/path/to/local/repo"
+            disabled={!desktopAvailable || missionInspecting}
           />
-          <p className="panel-copy compact">Drafting is visible only as UI shape. No prompt is submitted from this shell.</p>
+          <p className="panel-copy compact">
+            This uses window.conductor?.missions?.inspectRepoReadiness with only a projectPath. It reads allowlisted
+            metadata files only, returns rendererCanExecuteArbitraryActions=false, and does not execute shell commands.
+          </p>
+          <div className="actions">
+            <button
+              className="btn-ghost primary"
+              onClick={inspectRepoReadiness}
+              disabled={!desktopAvailable || !missionRepoPath.trim() || missionInspecting || !window.conductor?.missions?.inspectRepoReadiness}
+            >
+              {missionInspecting ? 'Inspecting...' : 'Inspect repo readiness'}
+            </button>
+            <span className="hint">Read-only, audited, no command allowlist.</span>
+          </div>
+          {missionError && <p className="empty-state">{missionError}</p>}
+          {missionResult && (
+            <div className="mission-result-box">
+              <strong>{missionResult.repoName}: {missionResult.summary.readiness}</strong>
+              <span>Package manager: {missionResult.summary.packageManager}</span>
+              <span>Git: {missionResult.summary.hasGitRepository ? 'detected' : 'not detected'} · Tests: {missionResult.summary.hasTestScript ? 'detected' : 'missing'} · Build: {missionResult.summary.hasBuildScript ? 'detected' : 'missing'}</span>
+              <span>{missionResult.message}</span>
+            </div>
+          )}
         </section>
 
         <section className="card mission-panel">
           <span className="eyebrow">Agent readiness</span>
           <div className="mission-readiness-list">
             <MissionReadinessRow label="Agent runtimes" value="Use Agent Runtimes for live local readiness" tone="ok" />
-            <MissionReadinessRow label="Mission runner" value="Not connected" tone="warn" />
+            <MissionReadinessRow label="Read-only repo inspector" value={desktopAvailable ? 'Available in desktop bridge' : 'Requires desktop bridge'} tone={desktopAvailable ? 'ok' : 'warn'} />
+            <MissionReadinessRow label="Agent mission runner" value="Not connected" tone="warn" />
             <MissionReadinessRow label="Deliverable store" value="Not connected" tone="muted" />
           </div>
         </section>
@@ -402,16 +454,16 @@ function MissionControlView() {
           <span className="eyebrow">Approvals required</span>
           <div className="mission-approval-box">
             <strong>No approvals pending</strong>
-            <span>Real approval requests will come from allowlisted mission actions only.</span>
+            <span>Read-only repo inspection does not require approval because it has no command execution path.</span>
           </div>
-          <p className="panel-copy compact">No approve/reject controls are shown because no mission exists.</p>
+          <p className="panel-copy compact">Future write or run actions must flow through native approval before execution.</p>
         </section>
 
         <section className="card mission-panel mission-timeline-panel">
           <span className="eyebrow">Mission timeline</span>
           <div className="mission-empty-timeline">
-            <strong>Waiting for the first real mission</strong>
-            <span>No fake planning, running, completed, or failed mission events are displayed.</span>
+            <strong>{missionResult ? 'Readiness inspection completed' : 'Waiting for the first real mission inspection'}</strong>
+            <span>{missionResult ? 'A sanitized readiness summary is shown above. No fake timeline events were created.' : 'No fake planning, running, completed, or failed mission events are displayed.'}</span>
           </div>
         </section>
       </div>

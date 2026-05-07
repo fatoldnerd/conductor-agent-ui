@@ -43,6 +43,9 @@ const conductorApi = {
     openDocumentation: (docsTarget) => ipcRenderer.invoke('runtimeActions:openDocumentation', { docsTarget }),
     runHealthCheck: (runtimeId, healthCheckId) => ipcRenderer.invoke('runtimeActions:runHealthCheck', { runtimeId, healthCheckId }),
   },
+  missions: {
+    inspectRepoReadiness: (projectPath) => ipcRenderer.invoke('missions:inspectRepoReadiness', { projectPath }),
+  },
 };
 
 contextBridge.exposeInMainWorld('conductor', conductorApi);
