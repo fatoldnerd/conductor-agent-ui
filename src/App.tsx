@@ -61,7 +61,7 @@ const NAV: {
   { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
   { id: 'agents', label: 'Agents', icon: IconAgents },
   { id: 'teams', label: 'Teams', icon: IconTeams },
-  { id: 'workflows', label: 'Workflows', icon: IconWorkflow },
+  { id: 'workflows', label: 'Mission Control', icon: IconWorkflow },
   { id: 'tools', label: 'Agent Runtimes', icon: IconTools },
   { id: 'console', label: 'Agent Console', icon: IconPlay },
   { id: 'integrations', label: 'Installers', icon: IconCommand, badge: String(listIntegrationRecipes().length) },
@@ -73,7 +73,7 @@ const TITLES: Record<View, { title: string; crumb: string }> = {
   dashboard: { title: 'Overview', crumb: 'Live operations' },
   agents: { title: 'Agents', crumb: 'All running and idle agents' },
   teams: { title: 'Teams', crumb: 'Coordinated agent squads' },
-  workflows: { title: 'Workflows', crumb: 'Pipelines and graphs' },
+  workflows: { title: 'Mission Control', crumb: 'Goals, approvals, and mission progress' },
   tools: { title: 'Agent Runtimes', crumb: 'Local runtimes, tools, and services' },
   console: { title: 'Agent Console', crumb: 'Read-only local agent invocations' },
   integrations: { title: 'Installers', crumb: 'Guided agent runtime setup' },
@@ -93,7 +93,7 @@ export default function App() {
           {view === 'dashboard' && <DashboardView setView={setView} />}
           {view === 'agents' && <AgentsView />}
           {view === 'teams' && <TeamsView />}
-          {view === 'workflows' && <WorkflowsView />}
+          {view === 'workflows' && <MissionControlView />}
           {view === 'tools' && <ToolsView setView={setView} />}
           {view === 'console' && <AgentConsoleView />}
           {view === 'integrations' && <IntegrationsView />}
@@ -360,13 +360,74 @@ function TeamsView() {
 
 /* -------------------------------------------------------------- Workflow view */
 
-function WorkflowsView() {
+function MissionControlView() {
   return (
-    <OperationalEmptyState
-      eyebrow="Workflows"
-      title="No real workflow graph is connected yet"
-      body="A workflow canvas will render only when Conductor can load actual local workflow definitions and run state. No live graph or node status is fabricated."
-    />
+    <div className="mission-control-page">
+      <div className="card mission-hero">
+        <span className="eyebrow">Mission Control</span>
+        <h2>No mission execution engine connected yet</h2>
+        <p>
+          Mission Control is the plain-English orchestration layer for goals, approvals, progress, and deliverables.
+          This shell is intentionally non-executing. No fake missions are rendered, no agent work is started, and no
+          command surface exists behind the Create Mission button.
+        </p>
+        <div className="actions">
+          <button className="btn-ghost primary" disabled>Create mission disabled</button>
+          <span className="hint">Mission execution is parked until an allowlisted local mission runner exists.</span>
+        </div>
+      </div>
+
+      <div className="mission-shell-grid">
+        <section className="card mission-panel mission-goal-panel">
+          <span className="eyebrow">Mission goal</span>
+          <label htmlFor="mission-goal-input">What should the agents accomplish?</label>
+          <textarea
+            id="mission-goal-input"
+            placeholder="Example: inspect this repo and summarize readiness. Mission runner not connected yet."
+            disabled
+          />
+          <p className="panel-copy compact">Drafting is visible only as UI shape. No prompt is submitted from this shell.</p>
+        </section>
+
+        <section className="card mission-panel">
+          <span className="eyebrow">Agent readiness</span>
+          <div className="mission-readiness-list">
+            <MissionReadinessRow label="Agent runtimes" value="Use Agent Runtimes for live local readiness" tone="ok" />
+            <MissionReadinessRow label="Mission runner" value="Not connected" tone="warn" />
+            <MissionReadinessRow label="Deliverable store" value="Not connected" tone="muted" />
+          </div>
+        </section>
+
+        <section className="card mission-panel">
+          <span className="eyebrow">Approvals required</span>
+          <div className="mission-approval-box">
+            <strong>No approvals pending</strong>
+            <span>Real approval requests will come from allowlisted mission actions only.</span>
+          </div>
+          <p className="panel-copy compact">No approve/reject controls are shown because no mission exists.</p>
+        </section>
+
+        <section className="card mission-panel mission-timeline-panel">
+          <span className="eyebrow">Mission timeline</span>
+          <div className="mission-empty-timeline">
+            <strong>Waiting for the first real mission</strong>
+            <span>No fake planning, running, completed, or failed mission events are displayed.</span>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function MissionReadinessRow({ label, value, tone }: { label: string; value: string; tone: 'ok' | 'warn' | 'muted' }) {
+  return (
+    <div className="mission-readiness-row">
+      <span className={`status-dot ${tone === 'ok' ? 'ok' : tone === 'warn' ? 'missing' : ''}`} />
+      <div>
+        <strong>{label}</strong>
+        <span>{value}</span>
+      </div>
+    </div>
   );
 }
 
