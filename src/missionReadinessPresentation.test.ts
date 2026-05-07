@@ -16,8 +16,8 @@ describe('Mission readiness presentation', () => {
     expect(appSource).toContain('No risk notes detected from allowlisted metadata.');
   });
 
-  it('presents the next safe action as a native-approved read-only repo review', () => {
-    expect(appSource).toContain('Next safe action');
+  it('presents the follow-on action as a native-approved read-only repo review', () => {
+    expect(appSource).toContain('mission-inline-next-action');
     expect(appSource).toContain('Start approved repo review');
     expect(appSource).toContain('Native approval required');
     expect(appSource).toContain('Fixed runtime: Codex CLI read-only');

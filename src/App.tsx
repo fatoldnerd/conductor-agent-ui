@@ -492,6 +492,34 @@ function MissionControlView() {
                 <span>No risk notes detected from allowlisted metadata.</span>
               )}
               <span>{missionResult.message}</span>
+              <div className="mission-inline-next-action">
+                <div className="mission-approval-box">
+                  <strong>Start approved repo review</strong>
+                  <span>Native approval required. Fixed runtime: Codex CLI read-only. Electron main owns the prompt and the allowlisted recipe.</span>
+                </div>
+                <div className="actions mission-readiness-actions">
+                  <button
+                    className="btn-ghost primary"
+                    onClick={startReadOnlyRepoReview}
+                    disabled={!desktopAvailable || !missionRepoPath.trim() || missionReviewStarting || !window.conductor?.missions?.startReadOnlyRepoReview}
+                  >
+                    {missionReviewStarting ? 'Requesting approval...' : 'Start approved repo review'}
+                  </button>
+                  <span className="hint mission-action-safety-hint">Native approval required. No generic mission execution channel.</span>
+                </div>
+                {missionReviewError && <p className="empty-state">{missionReviewError}</p>}
+                {missionReviewStart && (
+                  <div className="mission-result-box nested">
+                    <div className="mission-result-heading">
+                      <strong>Repo review mission: {missionReviewStart.status}</strong>
+                      <span className="mission-score">{missionReviewStart.runtimeId}</span>
+                    </div>
+                    <span>{missionReviewStart.message}</span>
+                    <span>Native approval: {missionReviewStart.nativeApproval.confirmed ? 'confirmed' : 'cancelled'}</span>
+                    {missionReviewTranscript.length > 0 && <pre className="mission-review-transcript">{missionReviewTranscript.join('\n')}</pre>}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </section>
@@ -513,36 +541,6 @@ function MissionControlView() {
             <span>Read-only repo inspection does not require approval because it has no command execution path.</span>
           </div>
           <p className="panel-copy compact">Future write or run actions must flow through native approval before execution.</p>
-        </section>
-
-        <section className="card mission-panel">
-          <span className="eyebrow">Next safe action</span>
-          <div className="mission-approval-box">
-            <strong>Start approved repo review</strong>
-            <span>Native approval required. Fixed runtime: Codex CLI read-only. Electron main owns the prompt and the allowlisted recipe.</span>
-          </div>
-          <div className="actions mission-readiness-actions">
-            <button
-              className="btn-ghost primary"
-              onClick={startReadOnlyRepoReview}
-              disabled={!desktopAvailable || !missionRepoPath.trim() || missionReviewStarting || !missionResult || !window.conductor?.missions?.startReadOnlyRepoReview}
-            >
-              {missionReviewStarting ? 'Requesting approval...' : 'Start approved repo review'}
-            </button>
-            <span className="hint mission-action-safety-hint">Native approval required. No generic mission execution channel.</span>
-          </div>
-          {missionReviewError && <p className="empty-state">{missionReviewError}</p>}
-          {missionReviewStart && (
-            <div className="mission-result-box">
-              <div className="mission-result-heading">
-                <strong>Repo review mission: {missionReviewStart.status}</strong>
-                <span className="mission-score">{missionReviewStart.runtimeId}</span>
-              </div>
-              <span>{missionReviewStart.message}</span>
-              <span>Native approval: {missionReviewStart.nativeApproval.confirmed ? 'confirmed' : 'cancelled'}</span>
-              {missionReviewTranscript.length > 0 && <pre className="mission-review-transcript">{missionReviewTranscript.join('\n')}</pre>}
-            </div>
-          )}
         </section>
 
         <section className="card mission-panel mission-timeline-panel">

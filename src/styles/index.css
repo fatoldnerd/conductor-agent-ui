@@ -1474,6 +1474,17 @@ a {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+.mission-inline-next-action {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.mission-result-box.nested {
+  margin-top: 0;
+  background: rgba(15, 23, 42, 0.46);
+}
 .agent-console-page {
   display: grid;
   gap: 16px;
