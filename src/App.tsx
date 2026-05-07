@@ -415,8 +415,13 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
   const selectedHealthChecks = selectedItem?.healthChecks ?? [];
   const selectedActionMetadata = selectedItem?.actions.find((action) => action.kind === selectedAction) ?? null;
 
-  const selectAction = (item: LocalToolItem, action: LocalToolAction) => {
+  const selectAction = async (item: LocalToolItem, action: LocalToolAction) => {
     if (action.kind === 'open_docs' && action.docsUrl) {
+      const openDocumentationTarget = item.recipeId;
+      if (openDocumentationTarget && window.conductor?.runtimeActions?.openDocumentation) {
+        await window.conductor.runtimeActions.openDocumentation(openDocumentationTarget);
+        return;
+      }
       window.open(action.docsUrl, '_blank', 'noopener,noreferrer');
       return;
     }

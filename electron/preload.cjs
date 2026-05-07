@@ -40,6 +40,7 @@ const conductorApi = {
     confirmNativeApprovalDecision: (payload) => ipcRenderer.invoke('runtimeActions:confirmNativeApprovalDecision', payload),
     getNativeConfirmations: () => ipcRenderer.invoke('runtimeActions:getNativeConfirmations'),
     refreshInventory: () => ipcRenderer.invoke('runtimeActions:refreshInventory'),
+    openDocumentation: (docsTarget) => ipcRenderer.invoke('runtimeActions:openDocumentation', { docsTarget }),
   },
 };
 

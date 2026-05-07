@@ -306,6 +306,17 @@ ipcMain.handle('runtimeActions:refreshInventory', async (event) => {
   });
 });
 
+ipcMain.handle('runtimeActions:openDocumentation', async (event, payload) => {
+  assertTrustedSender(event);
+  return executeAllowlistedRuntimeAction({
+    desktopApi: 'runtime.openDocumentation',
+    source: 'renderer',
+    docsTarget: payload?.docsTarget,
+  }, {
+    openExternal: shell.openExternal.bind(shell),
+  });
+});
+
 ipcMain.handle('agents:listRuntimes', async (event) => {
   assertTrustedSender(event);
   return listAgentRuntimes();

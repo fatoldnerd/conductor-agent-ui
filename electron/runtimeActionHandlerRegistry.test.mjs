@@ -61,6 +61,38 @@ describe('runtime action handler registry', () => {
     expect(JSON.stringify(auditEvents)).not.toContain('token');
   });
 
+  it('opens documentation through exact recipe ids and controlled HTTPS URLs', async () => {
+    const openExternal = vi.fn(async () => undefined);
+    const appendRuntimeActionAuditEvents = vi.fn(() => ({ schemaVersion: 1, status: 'ready', events: [], message: 'ok' }));
+    const listIntegrationRecipes = vi.fn(() => [
+      { id: 'codex-cli', docsUrl: 'https://github.com/openai/codex' },
+      { id: 'bad-docs', docsUrl: 'file:///Users/brad/secrets.txt' },
+    ]);
+
+    const result = await executeAllowlistedRuntimeAction(
+      { desktopApi: 'runtime.openDocumentation', docsTarget: 'codex-cli', source: 'renderer', correlationId: 'corr_docs_1' },
+      { openExternal, appendRuntimeActionAuditEvents, listIntegrationRecipes, now: () => '2026-05-07T09:10:00.000Z' },
+    );
+
+    expect(openExternal).toHaveBeenCalledWith('https://github.com/openai/codex');
+    expect(result).toMatchObject({
+      schemaVersion: 1,
+      status: 'succeeded',
+      desktopApi: 'runtime.openDocumentation',
+      docsTarget: 'codex-cli',
+      openedUrl: 'https://github.com/openai/codex',
+      executedShell: false,
+      rendererCanExecuteArbitraryActions: false,
+    });
+    expect(appendRuntimeActionAuditEvents).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(appendRuntimeActionAuditEvents.mock.calls[0][0])).not.toContain('/Users/');
+
+    await expect(executeAllowlistedRuntimeAction(
+      { desktopApi: 'runtime.openDocumentation', docsTarget: 'bad-docs', source: 'renderer' },
+      { openExternal, appendRuntimeActionAuditEvents, listIntegrationRecipes },
+    )).rejects.toThrow('Documentation URL is not an allowlisted HTTPS URL');
+  });
+
   it('rejects renderer attempts to execute arbitrary or unimplemented actions', async () => {
     await expect(executeAllowlistedRuntimeAction({
       desktopApi: 'runtime.runHealthCheck',

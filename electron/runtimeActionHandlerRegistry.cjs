@@ -1,6 +1,14 @@
 const { collectLocalInventory: defaultCollectLocalInventory } = require('./systemInventory.cjs');
 const { appendRuntimeActionAuditEvents: defaultAppendRuntimeActionAuditEvents } = require('./runtimeActionAuditStore.cjs');
 
+const DOCUMENTATION_URLS = {
+  'claude-code': 'https://docs.anthropic.com/en/docs/claude-code',
+  'codex-cli': 'https://github.com/openai/codex',
+  'gemini-cli': 'https://github.com/google-gemini/gemini-cli',
+  'hermes-agent': 'https://hermes-agent.nousresearch.com/docs',
+  openclaw: 'https://github.com/outsourc-e/OpenClaw',
+};
+
 const ALLOWLISTED_DESKTOP_APIS = new Set([
   'runtime.refreshInventory',
   'runtime.runHealthCheck',
@@ -28,7 +36,17 @@ function listRuntimeActionHandlerRegistry() {
         reason: 'Refreshes sanitized desktop inventory through the existing Electron main inventory collector. No shell command or renderer-provided command is accepted.',
       },
       'runtime.runHealthCheck': plannedHandler('runtime.runHealthCheck'),
-      'runtime.openDocumentation': plannedHandler('runtime.openDocumentation'),
+      'runtime.openDocumentation': {
+        desktopApi: 'runtime.openDocumentation',
+        status: 'implemented',
+        executable: true,
+        executionKind: 'harmless_open_https_documentation',
+        acceptsRendererCommand: false,
+        requiresShell: false,
+        requiresNativeConfirmation: false,
+        auditRequired: true,
+        reason: 'Opens exact allowlisted HTTPS documentation URLs through Electron shell.openExternal. Renderer supplies a recipe id only, never a raw URL or command.',
+      },
       'runtime.previewInstallerRecipe': plannedHandler('runtime.previewInstallerRecipe'),
       'runtime.openConfigurationGuide': plannedHandler('runtime.openConfigurationGuide'),
     },
@@ -59,6 +77,10 @@ async function executeAllowlistedRuntimeAction(payload, deps = {}) {
 
   if (request.desktopApi === 'runtime.refreshInventory') {
     return executeRefreshInventory(request, deps);
+  }
+
+  if (request.desktopApi === 'runtime.openDocumentation') {
+    return executeOpenDocumentation(request, deps);
   }
 
   throw new Error(`No executable allowlisted handler for ${request.desktopApi}`);
@@ -105,6 +127,68 @@ async function executeRefreshInventory(request, deps = {}) {
   return result;
 }
 
+async function executeOpenDocumentation(request, deps = {}) {
+  const openExternal = deps.openExternal;
+  if (typeof openExternal !== 'function') throw new Error('Documentation opener is unavailable');
+  const appendRuntimeActionAuditEvents = deps.appendRuntimeActionAuditEvents || defaultAppendRuntimeActionAuditEvents;
+  const now = deps.now || (() => new Date().toISOString());
+  const docsTarget = sanitizeDocsTarget(request.docsTarget);
+  const url = resolveDocumentationUrl(docsTarget, deps);
+  if (!isAllowlistedHttpsUrl(url)) throw new Error('Documentation URL is not an allowlisted HTTPS URL');
+
+  const occurredAt = now();
+  await openExternal(url);
+  appendRuntimeActionAuditEvents([
+    buildAuditEvent({
+      eventType: 'runtime_action_completed',
+      occurredAt,
+      correlationId: request.correlationId,
+      actionKind: 'open_documentation',
+      outcome: 'succeeded',
+      payloadSummary: `Open documentation for ${docsTarget}.`,
+      resultMessage: 'Documentation opened through Electron shell.openExternal using an allowlisted HTTPS URL.',
+    }),
+  ]);
+
+  return {
+    schemaVersion: 1,
+    status: 'succeeded',
+    desktopApi: 'runtime.openDocumentation',
+    correlationId: request.correlationId,
+    runtimeId: docsTarget,
+    actionKind: 'open_documentation',
+    docsTarget,
+    openedUrl: url,
+    source: request.source,
+    rendererCanExecuteArbitraryActions: false,
+    executedShell: false,
+    message: 'Documentation was opened through an allowlisted Electron main handler.',
+  };
+}
+
+function resolveDocumentationUrl(docsTarget, deps = {}) {
+  const recipe = typeof deps.listIntegrationRecipes === 'function'
+    ? deps.listIntegrationRecipes().find((item) => item.id === docsTarget)
+    : null;
+  return recipe?.docsUrl || DOCUMENTATION_URLS[docsTarget] || null;
+}
+
+function sanitizeDocsTarget(value) {
+  const text = String(value || '');
+  if (/^[a-z0-9-]{1,60}$/.test(text)) return text;
+  throw new Error('Invalid documentation target');
+}
+
+function isAllowlistedHttpsUrl(value) {
+  if (typeof value !== 'string') return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' && Object.values(DOCUMENTATION_URLS).includes(value);
+  } catch {
+    return false;
+  }
+}
+
 function validateRuntimeActionRequest(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new Error('Runtime action request must be an object');
@@ -120,6 +204,7 @@ function validateRuntimeActionRequest(payload) {
     desktopApi,
     source: sanitizeToken(payload.source || 'renderer', 'renderer'),
     correlationId: sanitizeToken(payload.correlationId || `corr_${Date.now()}`, `corr_${Date.now()}`),
+    docsTarget: payload.docsTarget,
   };
 }
 
@@ -129,20 +214,29 @@ function sanitizeToken(value, fallback) {
   return fallback;
 }
 
-function buildAuditEvent({ eventType, occurredAt, correlationId, outcome, resultMessage }) {
+function buildAuditEvent({
+  eventType,
+  occurredAt,
+  correlationId,
+  outcome,
+  resultMessage,
+  actionKind = 'refresh_inventory',
+  runtimeId = 'local-inventory',
+  payloadSummary = 'Refresh sanitized local inventory using the allowlisted Electron main handler.',
+}) {
   return {
     schemaVersion: 1,
     eventType,
     occurredAt,
     correlationId,
-    runtimeId: 'local-inventory',
-    actionKind: 'refresh_inventory',
+    runtimeId,
+    actionKind,
     source: 'renderer',
     submitState: 'desktop_handler',
     outcome,
     safeForLog: true,
     redactedFields: [],
-    payloadSummary: 'Refresh sanitized local inventory using the allowlisted Electron main handler.',
+    payloadSummary,
     resultMessage,
   };
 }

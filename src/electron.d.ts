@@ -278,6 +278,21 @@ export type RuntimeActionRefreshInventoryResult = {
   message: string;
 };
 
+export type RuntimeActionOpenDocumentationResult = {
+  schemaVersion: 1;
+  status: 'succeeded' | 'failed';
+  desktopApi: 'runtime.openDocumentation';
+  correlationId: string;
+  runtimeId: string;
+  actionKind: 'open_documentation';
+  source: string;
+  docsTarget: string;
+  openedUrl: string;
+  rendererCanExecuteArbitraryActions: false;
+  executedShell: false;
+  message: string;
+};
+
 declare global {
   interface Window {
     conductor?: {
@@ -312,6 +327,7 @@ declare global {
         confirmNativeApprovalDecision: (payload: RuntimeActionNativeConfirmationPayload) => Promise<RuntimeActionNativeConfirmationResult>;
         getNativeConfirmations: () => Promise<RuntimeActionNativeConfirmationReadResult>;
         refreshInventory: () => Promise<RuntimeActionRefreshInventoryResult>;
+        openDocumentation: (docsTarget: string) => Promise<RuntimeActionOpenDocumentationResult>;
       };
     };
   }

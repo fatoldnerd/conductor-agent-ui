@@ -51,6 +51,8 @@ describe('production operational UI data sources', () => {
     expect(appSource).toContain('window.conductor.runtimeActions.getNativeConfirmations');
     expect(appSource).toContain('window.conductor.runtimeActions.refreshInventory');
     expect(appSource).toContain('refreshInventoryResult.inventory');
+    expect(appSource).toContain('window.conductor.runtimeActions.openDocumentation');
+    expect(appSource).toContain('openDocumentationTarget');
     expect(appSource).toContain('runtimeActionNativeConfirmationHistorySource.status');
     expect(appSource).toContain('No action executed from native confirmation');
     expect(appSource).toContain('No command executes from these controls');
