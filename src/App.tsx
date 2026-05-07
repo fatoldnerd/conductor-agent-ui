@@ -385,6 +385,9 @@ function MissionControlView() {
       setMissionInspecting(false);
     }
   };
+  const missionRiskNotes = missionResult?.summary.riskNotes ?? [];
+  const missionReadinessScore = missionResult ? calculateMissionReadinessScore(missionResult) : 0;
+  const missionReadinessLabel = missionResult ? formatMissionReadinessLabel(missionResult.summary.readiness) : null;
 
   return (
     <div className="mission-control-page">
@@ -425,16 +428,24 @@ function MissionControlView() {
               onClick={inspectRepoReadiness}
               disabled={!desktopAvailable || !missionRepoPath.trim() || missionInspecting || !window.conductor?.missions?.inspectRepoReadiness}
             >
-              {missionInspecting ? 'Inspecting...' : 'Inspect repo readiness'}
+              {missionInspecting ? 'Inspecting...' : 'Run read-only readiness check'}
             </button>
             <span className="hint">Read-only, audited, no command allowlist.</span>
           </div>
           {missionError && <p className="empty-state">{missionError}</p>}
           {missionResult && (
             <div className="mission-result-box">
-              <strong>{missionResult.repoName}: {missionResult.summary.readiness}</strong>
+              <div className="mission-result-heading">
+                <strong>{missionResult.repoName}: {missionReadinessLabel}</strong>
+                <span className="mission-score">Readiness score {missionReadinessScore}/100</span>
+              </div>
               <span>Package manager: {missionResult.summary.packageManager}</span>
-              <span>Git: {missionResult.summary.hasGitRepository ? 'detected' : 'not detected'} · Tests: {missionResult.summary.hasTestScript ? 'detected' : 'missing'} · Build: {missionResult.summary.hasBuildScript ? 'detected' : 'missing'}</span>
+              <span>Git: {missionResult.summary.hasGitRepository ? 'detected' : 'not detected'} · Tests: {missionResult.summary.hasTestScript ? 'detected' : 'missing'} · Build: {missionResult.summary.hasBuildScript ? 'detected' : 'missing'} · README: {missionResult.summary.hasReadme ? 'detected' : 'missing'}</span>
+              {missionRiskNotes.length > 0 ? (
+                <span>Risk notes: {missionRiskNotes.join(' · ')}</span>
+              ) : (
+                <span>No risk notes detected from allowlisted metadata.</span>
+              )}
               <span>{missionResult.message}</span>
             </div>
           )}
@@ -459,6 +470,18 @@ function MissionControlView() {
           <p className="panel-copy compact">Future write or run actions must flow through native approval before execution.</p>
         </section>
 
+        <section className="card mission-panel">
+          <span className="eyebrow">Next safe action</span>
+          <div className="mission-approval-box">
+            <strong>Generate review plan</strong>
+            <span>Preview only. This future step should turn metadata into a deterministic review checklist before any agent is launched.</span>
+          </div>
+          <div className="actions">
+            <button className="btn-ghost" disabled>Preview only</button>
+            <span className="hint">No mission planner bridge exists yet.</span>
+          </div>
+        </section>
+
         <section className="card mission-panel mission-timeline-panel">
           <span className="eyebrow">Mission timeline</span>
           <div className="mission-empty-timeline">
@@ -469,6 +492,23 @@ function MissionControlView() {
       </div>
     </div>
   );
+}
+
+function formatMissionReadinessLabel(readiness: MissionRepoReadinessResult['summary']['readiness']) {
+  if (readiness === 'ready_for_read_only_agent_review') return 'Ready for read-only agent review';
+  return 'Needs attention before agent review';
+}
+
+function calculateMissionReadinessScore(result: MissionRepoReadinessResult) {
+  const checks = [
+    result.summary.hasGitRepository,
+    result.summary.hasPackageJson || result.summary.packageManager !== 'unknown',
+    result.summary.hasTestScript,
+    result.summary.hasBuildScript,
+    result.summary.hasReadme,
+  ];
+  const baseScore = Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  return Math.max(0, baseScore - result.summary.riskNotes.length * 10);
 }
 
 function MissionReadinessRow({ label, value, tone }: { label: string; value: string; tone: 'ok' | 'warn' | 'muted' }) {
