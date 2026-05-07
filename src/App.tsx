@@ -197,6 +197,14 @@ function TopBar({ view }: { view: View }) {
   );
 }
 
+async function refreshLocalInventory(): Promise<LocalInventory> {
+  if (window.conductor?.runtimeActions?.refreshInventory) {
+    const refreshInventoryResult = await window.conductor.runtimeActions.refreshInventory();
+    return refreshInventoryResult.inventory;
+  }
+  return window.conductor!.system.collectInventory();
+}
+
 /* -------------------------------------------------------------- Dashboard */
 
 function DashboardView({ setView }: { setView: (v: View) => void }) {
@@ -210,7 +218,7 @@ function DashboardView({ setView }: { setView: (v: View) => void }) {
     setLoading(true);
     setInventoryError(null);
     try {
-      setInventory(await window.conductor.system.collectInventory());
+      setInventory(await refreshLocalInventory());
     } catch (err) {
       setInventory(null);
       setInventoryError(err instanceof Error ? err.message : String(err));
@@ -383,7 +391,7 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
     setLoading(true);
     setInventoryError(null);
     try {
-      setInventory(await window.conductor.system.collectInventory());
+      setInventory(await refreshLocalInventory());
     } catch (err) {
       setInventory(null);
       setInventoryError(err instanceof Error ? err.message : String(err));
@@ -903,7 +911,7 @@ function DiagnosticsView() {
     setLoading(true);
     setInventoryError(null);
     try {
-      const nextInventory = await window.conductor.system.collectInventory();
+      const nextInventory = await refreshLocalInventory();
       setInventory(nextInventory);
     } catch (err) {
       setInventory(null);

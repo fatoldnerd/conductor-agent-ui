@@ -5,6 +5,7 @@ const path = require('node:path');
 const { promisify } = require('node:util');
 const { listIntegrationRecipes, planIntegrationInstall } = require('./integrationRecipes.cjs');
 const { collectLocalInventory } = require('./systemInventory.cjs');
+const { executeAllowlistedRuntimeAction } = require('./runtimeActionHandlerRegistry.cjs');
 const {
   readRuntimeActionAuditHistory,
   setRuntimeActionAuditLogPath,
@@ -295,6 +296,14 @@ ipcMain.handle('runtimeActions:confirmNativeApprovalDecision', async (event, pay
 ipcMain.handle('runtimeActions:getNativeConfirmations', async (event) => {
   assertTrustedSender(event);
   return readRuntimeActionNativeConfirmations();
+});
+
+ipcMain.handle('runtimeActions:refreshInventory', async (event) => {
+  assertTrustedSender(event);
+  return executeAllowlistedRuntimeAction({
+    desktopApi: 'runtime.refreshInventory',
+    source: 'renderer',
+  });
 });
 
 ipcMain.handle('agents:listRuntimes', async (event) => {

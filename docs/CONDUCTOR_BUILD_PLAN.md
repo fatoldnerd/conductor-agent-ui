@@ -187,9 +187,12 @@ Key commits:
 
 Latest confirmed checkpoint:
 
-- Commit: `283320e feat: add runtime-specific detail panels`
+- Commit: `b388e95 merge: runtime action handler registry contract`
+- Feature commit: `51b7620 feat: add runtime action handler registry contract`
 - GitHub Actions: Desktop macOS Build passed
-- Status: clean functional checkpoint
+- Latest verified Actions run: `25458687751`
+- Local validation: `npm test -- --run` passed with 50 test files and 184 tests; `npm run build` passed
+- Status: clean safety-foundation checkpoint before real allowlisted execution handlers
 
 Current app behavior:
 
@@ -198,6 +201,9 @@ Current app behavior:
 - Claude Code, Codex CLI, and Gemini CLI can show ready states when installed locally.
 - Hermes and OpenClaw are modeled as canonical runtimes/services, but must not be hardcoded to Brad's Mac Mini instances.
 - Hermes API/dashboard ports that are SSH tunnels or generic conflicts remain truthful as port conflict states, not local running service states.
+- Runtime action audit history, approval queue, approval decisions, native confirmation history, native confirmation projection, and approval controls are modeled and test-covered.
+- Future execution planning and allowlisted handler registry contracts exist.
+- No real runtime action execution handlers, generic execute IPC channels, or renderer-controlled shell execution exist yet.
 
 Known local inventory facts from Brad's Mac during prior smoke testing:
 

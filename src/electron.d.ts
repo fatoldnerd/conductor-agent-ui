@@ -264,6 +264,20 @@ export type RuntimeActionNativeConfirmationReadResult = {
   message: string;
 };
 
+export type RuntimeActionRefreshInventoryResult = {
+  schemaVersion: 1;
+  status: 'succeeded' | 'failed';
+  desktopApi: 'runtime.refreshInventory';
+  correlationId: string;
+  runtimeId: 'local-inventory';
+  actionKind: 'refresh_inventory';
+  source: string;
+  rendererCanExecuteArbitraryActions: false;
+  executedShell: false;
+  inventory: LocalInventory;
+  message: string;
+};
+
 declare global {
   interface Window {
     conductor?: {
@@ -297,6 +311,7 @@ declare global {
         submitApprovalDecision: (payload: RuntimeActionApprovalDecisionSubmitPayload) => Promise<RuntimeActionApprovalDecisionSubmitResult>;
         confirmNativeApprovalDecision: (payload: RuntimeActionNativeConfirmationPayload) => Promise<RuntimeActionNativeConfirmationResult>;
         getNativeConfirmations: () => Promise<RuntimeActionNativeConfirmationReadResult>;
+        refreshInventory: () => Promise<RuntimeActionRefreshInventoryResult>;
       };
     };
   }

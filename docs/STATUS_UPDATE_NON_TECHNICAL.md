@@ -1,6 +1,6 @@
 # Conductor Status Update - Non-Technical Version
 
-Date: 2026-05-05
+Date: 2026-05-07
 
 ## Short version
 
@@ -41,7 +41,7 @@ The key idea is a dual-layer cockpit:
 
 ## Where we are now
 
-We have completed the foundation phase for truthful local runtime detection and safe action modelling.
+We have completed the foundation phase for truthful local runtime detection and have now added the approval, audit, and allowlisted-handler contracts needed before safe execution.
 
 In plain English, this means:
 
@@ -51,7 +51,7 @@ In plain English, this means:
 - Desktop mode uses the local Electron app to inspect the machine safely.
 - The app can show whether tools like Claude Code, Codex CLI, Gemini CLI, Hermes, and OpenClaw are ready, missing, stopped, broken, or need configuration.
 - The app does not pretend that an SSH tunnel or a busy port means Hermes is running locally.
-- The app has a safety model for future actions, but does not yet run those actions.
+- The app has audit, approval, native confirmation, and allowlisted-handler contracts for future actions, but it still does not yet run meaningful runtime actions.
 
 This matters because trust is the product. A control centre that lies about what is running is worse than useless.
 
@@ -93,7 +93,19 @@ The app now has a rule that future actions must be tied to named safe desktop AP
 
 The app now has a structured request format for future actions. This means future actions will be packaged as safe, typed requests rather than raw commands.
 
-7. CI/build cleanup
+7. Audit and approval persistence
+
+The app can model and persist runtime action audit events, approval queue items, approval decisions, and native confirmation outcomes.
+
+8. Future execution planning contract
+
+The app can describe what a future approved execution would require, while still making clear that no execution happens yet.
+
+9. Allowlisted handler registry contract
+
+The app now has a named registry contract for future Electron-main action handlers. The latest checkpoint deliberately stops before real handlers, generic execute IPC, or renderer-controlled shell execution.
+
+10. CI/build cleanup
 
 The desktop build pipeline has been updated and is passing cleanly.
 
@@ -108,13 +120,13 @@ Current main branch validation:
 - macOS unsigned desktop build passes in GitHub Actions.
 - Desktop artifact upload succeeds.
 
-The latest test suite has 13 test files and 66 tests passing.
+The latest verified test suite has 50 test files and 184 tests passing.
 
 ## Percentage to full completion
 
-My estimate: about 30% complete toward the full product vision.
+My estimate: about 35% complete toward the full product vision.
 
-Why only 30%, even though a lot has been done?
+Why only 35%, even though a lot has been done?
 
 Because the most important foundation is now in place, but the app is not yet doing the big end-user workflow.
 
@@ -126,14 +138,18 @@ What is done:
 - Safe action preview model.
 - Approval and allowlist architecture.
 - Request envelope contract.
+- Audit, approval queue, approval decision, and native confirmation persistence.
+- Future execution planning contract.
+- Allowlisted handler registry contract.
 - Working desktop build pipeline.
 
 What is not done yet:
 
 - Real mission creation.
 - Real agent orchestration.
-- Real approval workflow.
 - Real execution of safe actions.
+- First harmless allowlisted desktop action, such as refresh inventory.
+- Real generic mission approval flow.
 - Durable run history.
 - Deliverable review.
 - Polished non-technical user experience.
@@ -225,17 +241,18 @@ It is tempting to add flashy mission features too early. The safer approach is t
 
 ## Recommended next phase
 
-The next phase should continue building toward safe execution, still without jumping straight into powerful actions.
+The next phase should turn the safety contracts into the smallest useful real actions, still without jumping straight into powerful agent execution.
 
 Recommended order:
 
-1. Audit log model.
-2. Approval workflow model.
-3. Desktop action handler shell.
-4. First harmless real action, probably refresh inventory or open documentation.
-5. Mission Control empty shell.
-6. Mission templates and guided flows.
+1. Refresh the stale repo roadmap/status docs.
+2. Smoke-test the latest macOS artifact from GitHub Actions run 25458687751.
+3. Implement the first harmless allowlisted real action: refresh inventory.
+4. Implement the second harmless allowlisted action: open documentation.
+5. Add one constrained runtime health check with exact allowlisted execution and sanitized output.
+6. Mission Control empty shell.
+7. Mission templates and guided flows.
 
 ## How to explain the current state in one paragraph
 
-Conductor is a desktop app we are building to become a safe control centre for AI agents. Right now, we have built the trust and safety foundation: it can inspect the local machine, show which AI tools are actually available, avoid fake data, and model future actions with approval and safety checks. It does not yet run full missions or orchestrate teams of agents. The next work is to add an audit trail and approval flow, then carefully turn safe preview actions into real actions. I would say we are about 30% of the way to the full vision, with the hardest trust foundations underway but the user-facing mission workflow still ahead.
+Conductor is a desktop app we are building to become a safe control centre for AI agents. Right now, we have built the trust and safety foundation: it can inspect the local machine, show which AI tools are actually available, avoid fake data, and model future actions with audit, approval, native confirmation, and allowlisted-handler contracts. It does not yet run full missions or orchestrate teams of agents. The next work is to carefully turn the safest preview actions into real actions, starting with refresh inventory and open documentation. I would say we are about 35% of the way to the full vision, with the hardest trust foundations underway but the user-facing mission workflow still ahead.
