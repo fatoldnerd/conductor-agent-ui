@@ -1353,16 +1353,23 @@ a {
 }
 .local-tool-row {
   display: grid;
-  grid-template-columns: 10px minmax(220px, 1fr) auto minmax(240px, auto);
-  align-items: center;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: start;
   gap: 10px;
   padding: 11px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.025);
+  min-width: 0;
 }
 .local-tool-main {
   min-width: 0;
+}
+.local-tool-row .chip {
+  grid-column: 2;
+  justify-self: start;
+  max-width: 100%;
+  margin-top: 6px;
 }
 .local-tool-main em {
   display: block;
@@ -1396,16 +1403,18 @@ a {
 }
 .tool-row-actions {
   display: flex;
+  grid-column: 2 / -1;
   justify-content: flex-end;
   gap: 6px;
   flex-wrap: wrap;
+  justify-self: start;
 }
 .tool-row-actions .btn-ghost {
   min-height: 30px;
   white-space: nowrap;
 }
 .runtime-detail-panel {
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
   display: grid;
   gap: 10px;
   padding: 12px;
@@ -1459,14 +1468,14 @@ a {
 }
 .install-preview-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   margin-bottom: 12px;
 }
 .install-preview-head .actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -1475,6 +1484,17 @@ a {
 }
 .runtime-callout {
   margin: 12px 0 0;
+}
+.runtime-note,
+.runtime-preflight-note {
+  padding: 0;
+  color: var(--text-dim);
+}
+.runtime-preflight-note p {
+  margin: 0 0 10px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.55;
 }
 .install-step {
   display: grid;
@@ -1834,6 +1854,10 @@ a {
   color: var(--text-muted);
   line-height: 1.6;
   font-size: 13.5px;
+}
+.panel-copy.compact {
+  margin-bottom: 12px;
+  font-size: 12.5px;
 }
 .install-meta {
   display: grid;

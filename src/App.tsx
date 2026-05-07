@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   IconActivity,
   IconAgents,
@@ -7,7 +7,6 @@ import {
   IconDashboard,
   IconInfo,
   IconLogo,
-  IconPause,
   IconPlay,
   IconPlus,
   IconSearch,
@@ -30,7 +29,6 @@ import {
   type LocalToolCategory,
   type LocalToolItem,
 } from './localTools';
-import { runtimeAvailable } from './agentRuntimeAvailability';
 import { deriveInventoryViewState } from './inventoryViewState';
 import {
   buildRuntimeActionApprovalDecisionHistorySourceState,
@@ -47,10 +45,6 @@ import type { RuntimeActionAuditPersistenceReadResult } from './runtimeActionAud
 import type { RuntimeActionNativeConfirmationReadResult } from './electron';
 import { readinessLabel } from './runtimeReadiness';
 import type {
-  AgentRunEvent,
-  AgentRunSnapshot,
-  AgentRuntimeDescriptor,
-  AgentRuntimeId,
   IntegrationInstallRun,
   LocalInventory,
   RuntimeActionApprovalDecisionSubmitPayload,
@@ -516,13 +510,9 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
             ) : (
               <RecipeStepPreview steps={selectedRecipe.install.steps} empty="No install preview is available for this recipe." />
             )}
-            <div className="install-callout runtime-callout">
-              <IconInfo />
-              <span>
-                This panel previews recipe metadata and health checks only. It does not accept shell input and it does
-                not run commands from the renderer.
-              </span>
-            </div>
+            <p className="panel-copy compact runtime-note">
+              Preview only. This panel does not accept shell input and does not run renderer-provided commands.
+            </p>
           </>
         ) : (
           <p className="empty-state">Select a preview action on an agent runtime to inspect suggested preflight details. Nothing runs from this panel.</p>
@@ -534,11 +524,10 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
 
 function ActionPreflightDetails({ action }: { action: LocalToolAction }) {
   return (
-    <div className="install-callout runtime-callout">
-      <IconInfo />
-      <span>
+    <div className="runtime-preflight-note">
+      <p>
         Suggested next step only. No command will run without explicit approval. Expected effect: {action.preflight.expectedEffect} Risk: {action.preflight.riskLevel}. Approval: {approvalModeLabel(action.approval.mode)}. Execution contract: {executionContractLabel(action.executionContract.status)}. Request envelope: {action.requestEnvelope?.submitState ?? 'not prepared'}. Approval workflow: {action.approvalWorkflow?.state ?? 'not prepared'}; {action.approvalWorkflow?.approvalPrompt ?? 'No approval workflow item has been prepared.'} {action.executionContract.reason} {action.approval.userFacingSummary}
-      </span>
+      </p>
     </div>
   );
 }
@@ -841,13 +830,9 @@ function IntegrationsView() {
             </div>
           </div>
 
-          <div className="install-callout">
-            <IconInfo />
-            <span>
-              This is an execution preview. The web app cannot execute commands. In the Electron desktop app,
-              Conductor requires both this UI acknowledgement and a native main-process approval dialog before any command runs.
-            </span>
-          </div>
+          <p className="panel-copy compact">
+            Preview only. Installer execution remains gated behind Electron main-process approval and is not part of the browser view.
+          </p>
 
           {error && <div className="install-error">{error}</div>}
 
@@ -1489,308 +1474,20 @@ function ActivityView() {
 
 /* -------------------------------------------------------------- Agent Console view */
 
-type ConsoleEntry = {
-  id: string;
-  kind: 'prompt' | 'stdout' | 'stderr' | 'status' | 'error' | 'system';
-  text: string;
-  at: string;
-};
-
 function AgentConsoleView() {
-  const desktopAvailable = Boolean(window.conductor?.agents);
-  const [runtimes, setRuntimes] = useState<AgentRuntimeDescriptor[]>([]);
-  const [inventory, setInventory] = useState<LocalInventory | null>(null);
-  const [runtimeId, setRuntimeId] = useState<AgentRuntimeId | null>(null);
-  const [projectPath, setProjectPath] = useState('');
-  const [projectStatus, setProjectStatus] = useState<{ valid: boolean; error?: string } | null>(null);
-  const [prompt, setPrompt] = useState('');
-  const [activeRun, setActiveRun] = useState<AgentRunSnapshot | null>(null);
-  const [transcript, setTranscript] = useState<ConsoleEntry[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
-  const entryCounter = useRef(0);
-
-  const appendEntry = (kind: ConsoleEntry['kind'], text: string) => {
-    entryCounter.current += 1;
-    const id = `${Date.now()}-${entryCounter.current}`;
-    setTranscript((prev) => [...prev, { id, kind, text, at: new Date().toISOString() }]);
-  };
-
-  useEffect(() => {
-    if (!window.conductor?.agents) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const list = await window.conductor!.agents.listRuntimes();
-        if (cancelled) return;
-        setRuntimes(list);
-        const inv = await window.conductor!.system.collectInventory().catch(() => null);
-        if (cancelled) return;
-        setInventory(inv);
-        const firstAvailable = list.find((runtime) => runtimeAvailable(runtime, inv));
-        setRuntimeId((firstAvailable ?? list[0])?.id ?? null);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!window.conductor?.agents?.onRunEvent) return;
-    return window.conductor.agents.onRunEvent((eventPayload: AgentRunEvent) => {
-      setActiveRun((current) => {
-        if (!current || current.runId !== eventPayload.runId) return current;
-        if (eventPayload.type === 'status') {
-          return {
-            ...current,
-            status: eventPayload.status,
-            exitCode: eventPayload.exitCode ?? current.exitCode ?? null,
-            finishedAt: eventPayload.finishedAt ?? current.finishedAt,
-          };
-        }
-        return current;
-      });
-      if (eventPayload.type === 'stdout') appendEntry('stdout', eventPayload.chunk);
-      else if (eventPayload.type === 'stderr') appendEntry('stderr', eventPayload.chunk);
-      else if (eventPayload.type === 'error') appendEntry('error', eventPayload.message);
-      else if (eventPayload.type === 'status') {
-        appendEntry('status', `status → ${eventPayload.status}${typeof eventPayload.exitCode === 'number' ? ` (exit ${eventPayload.exitCode})` : ''}`);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ block: 'end' });
-  }, [transcript]);
-
-  useEffect(() => {
-    if (!window.conductor?.agents) return;
-    if (!projectPath.trim()) {
-      setProjectStatus(null);
-      return;
-    }
-    let cancelled = false;
-    const handle = window.setTimeout(async () => {
-      try {
-        const result = await window.conductor!.agents.validateProject(projectPath.trim());
-        if (cancelled) return;
-        setProjectStatus(result.valid ? { valid: true } : { valid: false, error: result.error });
-      } catch (err) {
-        if (cancelled) return;
-        setProjectStatus({ valid: false, error: err instanceof Error ? err.message : String(err) });
-      }
-    }, 250);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(handle);
-    };
-  }, [projectPath]);
-
-  const selectedRuntime = runtimes.find((runtime) => runtime.id === runtimeId) ?? null;
-  const runtimeReady = selectedRuntime ? runtimeAvailable(selectedRuntime, inventory) : false;
-  const runActive = Boolean(activeRun && ['starting', 'running', 'cancelling'].includes(activeRun.status));
-  const canStart = Boolean(
-    desktopAvailable &&
-      selectedRuntime &&
-      runtimeReady &&
-      projectStatus?.valid &&
-      prompt.trim().length > 0 &&
-      !submitting &&
-      !runActive,
-  );
-
-  const startRun = async () => {
-    if (!canStart || !selectedRuntime || !window.conductor?.agents) return;
-    setSubmitting(true);
-    setError(null);
-    appendEntry('prompt', prompt.trim());
-    try {
-      const result = await window.conductor.agents.startRun({
-        runtimeId: selectedRuntime.id,
-        projectPath: projectPath.trim(),
-        prompt: prompt.trim(),
-        mode: 'read-only',
-      });
-      setActiveRun(result.snapshot);
-      appendEntry('system', `Started ${selectedRuntime.label} (run ${result.runId.slice(0, 14)}…) in ${result.snapshot.cwd}`);
-      setPrompt('');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-      appendEntry('error', message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const stopRun = async () => {
-    if (!activeRun || !window.conductor?.agents) return;
-    try {
-      const snapshot = await window.conductor.agents.stopRun(activeRun.runId);
-      setActiveRun(snapshot);
-      appendEntry('system', 'Stop signal sent (SIGTERM).');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-      appendEntry('error', message);
-    }
-  };
-
-  const clearTranscript = () => {
-    setTranscript([]);
-    setActiveRun((current) => (current && !runActive ? null : current));
-  };
-
-  if (!desktopAvailable) {
-    return (
-      <div className="agent-console-page">
-        <div className="card local-tools-hero">
-          <span className="eyebrow">Desktop bridge required</span>
-          <h2>Agent Console runs only inside the Conductor desktop app</h2>
-          <p>
-            The browser preview cannot spawn local processes. Open the Electron build to invoke installed agent CLIs in
-            read-only mode against a local project directory.
-          </p>
-          <div className="actions">
-            <button className="btn-ghost primary" disabled>Requires desktop bridge</button>
-            <span className="hint">Run `npm run desktop:dev` locally.</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="agent-console-page">
       <div className="card local-tools-hero">
-        <span className="eyebrow">Read-only agent invocation</span>
-        <h2>Run a local agent CLI against a project directory</h2>
+        <span className="eyebrow">Parked</span>
+        <h2>Agent Console is parked until the local run bridge is reliable</h2>
         <p>
-          The renderer only sends a structured request — runtime, project path, prompt, mode. The Electron main process
-          owns the command recipes, validates the working directory, and streams stdout, stderr, and status back. Write
-          mode is intentionally not implemented in this slice.
+          The previous console controls looked active but were not reliable enough for a desktop-first operator flow.
+          This tab now stays honest: no fake transcript, no half-working run form, and no command execution surface until
+          the allowlisted local agent runner is ready.
         </p>
-      </div>
-
-      <div className="agent-console-grid">
-        <div className="card agent-console-controls">
-          <div className="section-head compact">
-            <h2>Runtime</h2>
-            <span className="hint">{runtimes.length} allowlisted recipes</span>
-          </div>
-          <div className="agent-runtime-list">
-            {runtimes.map((runtime) => {
-              const available = runtimeAvailable(runtime, inventory);
-              const selected = runtime.id === runtimeId;
-              const awaitingInventory = !inventory && !runtime.needsValidation;
-              return (
-                <button
-                  type="button"
-                  key={runtime.id}
-                  className={`agent-runtime-row ${selected ? 'selected' : ''}`}
-                  disabled={!available || runActive}
-                  onClick={() => setRuntimeId(runtime.id)}
-                  title={runtime.notes.join(' ')}
-                >
-                  <span className={`status-dot ${available ? 'ok' : awaitingInventory ? '' : 'missing'}`} />
-                  <span className="agent-runtime-main">
-                    <strong>{runtime.label}</strong>
-                    <span>{runtime.description}</span>
-                  </span>
-                  <span className={`chip ${available ? 'chip-ok' : 'chip-muted'}`}>
-                    {runtime.needsValidation ? 'Needs validation' : available ? 'Available' : awaitingInventory ? 'Awaiting inventory' : 'Missing'}
-                  </span>
-                </button>
-              );
-            })}
-            {!runtimes.length && <p className="empty-state">No agent runtimes allowlisted.</p>}
-          </div>
-
-          <div className="section-head compact">
-            <h2>Project directory</h2>
-            <span className="hint">Absolute local path; main process validates</span>
-          </div>
-          <input
-            type="text"
-            className="agent-console-input"
-            placeholder="/Users/you/code/your-project"
-            value={projectPath}
-            onChange={(event) => setProjectPath(event.currentTarget.value)}
-            disabled={runActive}
-            spellCheck={false}
-          />
-          {projectStatus?.error && <div className="agent-console-hint error">{projectStatus.error}</div>}
-          {projectStatus?.valid && <div className="agent-console-hint ok">Validated as a local directory.</div>}
-
-          <div className="section-head compact">
-            <h2>Mode</h2>
-            <span className="hint">Read-only only in this slice</span>
-          </div>
-          <div className="agent-mode-row">
-            <span className="chip chip-ok">read-only</span>
-            <span className="agent-console-hint">Write mode is not implemented yet.</span>
-          </div>
-
-          <div className="install-callout agent-console-callout">
-            <IconInfo />
-            <span>
-              Conductor sends only {'{'} runtimeId, projectPath, prompt, mode {'}'} to the main process. Command,
-              args, env, and shell handling live in the trusted main-process recipe and are never exposed to the
-              renderer.
-            </span>
-          </div>
-        </div>
-
-        <div className="card agent-console-transcript">
-          <div className="section-head compact">
-            <h2>Transcript</h2>
-            <span className={`chip ${runActive ? 'chip-ok' : 'chip-muted'}`}>
-              {activeRun ? `${activeRun.status}${typeof activeRun.exitCode === 'number' ? ` · exit ${activeRun.exitCode}` : ''}` : 'idle'}
-            </span>
-          </div>
-          <div className="agent-transcript">
-            {transcript.length === 0 && (
-              <div className="empty-state">
-                Compose a prompt and start a read-only run. Output streams here as the main process reports stdout,
-                stderr, and status events.
-              </div>
-            )}
-            {transcript.map((entry) => (
-              <div key={entry.id} className={`agent-transcript-entry ${entry.kind}`}>
-                <span className="agent-transcript-tag">{entry.kind}</span>
-                <pre>{entry.text}</pre>
-              </div>
-            ))}
-            <div ref={transcriptEndRef} />
-          </div>
-
-          <div className="agent-prompt-row">
-            <textarea
-              className="agent-console-input prompt"
-              rows={3}
-              value={prompt}
-              onChange={(event) => setPrompt(event.currentTarget.value)}
-              placeholder="Describe what the agent should look at (read-only)…"
-              disabled={runActive}
-            />
-            <div className="agent-prompt-actions">
-              <button className="btn-ghost primary" onClick={startRun} disabled={!canStart}>
-                <IconPlay width={11} height={11} /> Start run
-              </button>
-              <button className="btn-ghost" onClick={stopRun} disabled={!runActive}>
-                <IconPause width={11} height={11} /> Stop
-              </button>
-              <button className="btn-ghost" onClick={clearTranscript} disabled={runActive || !transcript.length}>
-                Clear
-              </button>
-            </div>
-          </div>
-
-          {error && <div className="install-error agent-console-error">{error}</div>}
+        <div className="actions">
+          <button className="btn-ghost primary" disabled>Console parked</button>
+          <span className="hint">Use Agent Runtimes for the currently supported desktop actions.</span>
         </div>
       </div>
     </div>
