@@ -1381,6 +1381,18 @@ a {
   resize: none;
   color: var(--text);
 }
+.mission-readiness-actions {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+}
+.mission-action-safety-hint {
+  display: block;
+  width: 100%;
+  margin: 0;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
 .mission-goal-panel,
 .mission-timeline-panel {
   grid-row: span 2;

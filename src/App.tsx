@@ -422,7 +422,7 @@ function MissionControlView() {
             This uses window.conductor?.missions?.inspectRepoReadiness with only a projectPath. It reads allowlisted
             metadata files only, returns rendererCanExecuteArbitraryActions=false, and does not execute shell commands.
           </p>
-          <div className="actions">
+          <div className="actions mission-readiness-actions">
             <button
               className="btn-ghost primary"
               onClick={inspectRepoReadiness}
@@ -430,7 +430,7 @@ function MissionControlView() {
             >
               {missionInspecting ? 'Inspecting...' : 'Run read-only readiness check'}
             </button>
-            <span className="hint">Read-only, audited, no command allowlist.</span>
+            <span className="hint mission-action-safety-hint">Read-only, audited, no command allowlist.</span>
           </div>
           {missionError && <p className="empty-state">{missionError}</p>}
           {missionResult && (
