@@ -408,6 +408,7 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
   const selectedRecipe = selectedItem?.recipe ?? null;
   const selectedHealthChecks = selectedItem?.healthChecks ?? [];
   const selectedActionMetadata = selectedItem?.actions.find((action) => action.kind === selectedAction) ?? null;
+  const balancedToolColumns = useMemo(() => buildBalancedLocalToolColumns(categories), [categories]);
 
   const selectAction = async (item: LocalToolItem, action: LocalToolAction) => {
     if (action.kind === 'open_docs' && action.docsUrl) {
@@ -474,14 +475,18 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
         <RuntimeMetric label="Not scanned" value={summary.notScanned} />
       </div>
 
-      <div className="local-tools-sections">
-        {categories.map((category) => (
-          <LocalToolSection
-            key={category.id}
-            category={category}
-            selectedRecipeId={selectedRecipeId}
-            onAction={selectAction}
-          />
+      <div className="local-tools-sections balanced">
+        {balancedToolColumns.map((column, columnIndex) => (
+          <div className="local-tools-column" key={`local-tools-column-${columnIndex}`}>
+            {column.map((category) => (
+              <LocalToolSection
+                key={category.id}
+                category={category}
+                selectedRecipeId={selectedRecipeId}
+                onAction={selectAction}
+              />
+            ))}
+          </div>
         ))}
       </div>
 
@@ -551,6 +556,23 @@ function RuntimeMetric({ label, value }: { label: string; value: number }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function buildBalancedLocalToolColumns(categories: LocalToolCategory[]): LocalToolCategory[][] {
+  const agentRuntimeColumn = categories.filter((category) => category.id === 'agent-runtimes');
+  const supportingToolColumn = categories.filter((category) =>
+    category.id === 'developer-prerequisites'
+    || category.id === 'deployment-tools'
+    || category.id === 'running-services'
+  );
+  const remaining = categories.filter((category) =>
+    category.id !== 'agent-runtimes'
+    && category.id !== 'developer-prerequisites'
+    && category.id !== 'deployment-tools'
+    && category.id !== 'running-services'
+  );
+
+  return [agentRuntimeColumn, [...supportingToolColumn, ...remaining]].filter((column) => column.length > 0);
 }
 
 function LocalToolSection({

@@ -1341,6 +1341,17 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+  align-items: start;
+}
+.local-tools-sections.balanced {
+  align-items: start;
+}
+.local-tools-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-self: start;
+  min-width: 0;
 }
 .local-tool-section,
 .install-preview-panel {
@@ -1760,6 +1771,9 @@ a {
   }
   .local-tools-sections {
     grid-template-columns: 1fr;
+  }
+  .local-tools-column {
+    gap: 14px;
   }
   .local-tool-row {
     grid-template-columns: 10px minmax(0, 1fr) auto;
