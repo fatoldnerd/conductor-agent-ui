@@ -7,6 +7,7 @@ const { listIntegrationRecipes, planIntegrationInstall } = require('./integratio
 const { collectLocalInventory } = require('./systemInventory.cjs');
 const { executeAllowlistedRuntimeAction } = require('./runtimeActionHandlerRegistry.cjs');
 const { inspectRepoReadinessMission } = require('./missionReadinessInspector.cjs');
+const { startApprovedRepoReviewMission } = require('./missionRepoReviewRunner.cjs');
 const {
   readRuntimeActionAuditHistory,
   setRuntimeActionAuditLogPath,
@@ -331,6 +332,23 @@ ipcMain.handle('runtimeActions:runHealthCheck', async (event, payload) => {
 ipcMain.handle('missions:inspectRepoReadiness', async (event, payload) => {
   assertTrustedSender(event);
   return inspectRepoReadinessMission({ projectPath: payload?.projectPath });
+});
+
+ipcMain.handle('missions:startReadOnlyRepoReview', async (event, payload) => {
+  assertTrustedSender(event);
+  const senderId = event.sender.id;
+  const result = await startApprovedRepoReviewMission({ projectPath: payload?.projectPath }, {
+    parentWindow: BrowserWindow.fromWebContents(event.sender),
+    showMessageBox: dialog.showMessageBox.bind(dialog),
+    startAgentRun: (safePayload) => startAgentRun(safePayload, {
+      onEvent: (eventPayload) => {
+        if (event.sender.isDestroyed && event.sender.isDestroyed()) return;
+        event.sender.send('agents:runEvent', eventPayload);
+      },
+    }),
+  });
+  if (result.runId) agentRunOwners.set(result.runId, senderId);
+  return result;
 });
 
 ipcMain.handle('agents:listRuntimes', async (event) => {

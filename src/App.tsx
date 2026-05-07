@@ -45,9 +45,11 @@ import type { RuntimeActionAuditPersistenceReadResult } from './runtimeActionAud
 import type { RuntimeActionNativeConfirmationReadResult } from './electron';
 import { readinessLabel } from './runtimeReadiness';
 import type {
+  AgentRunEvent,
   IntegrationInstallRun,
   LocalInventory,
   MissionRepoReadinessResult,
+  MissionRepoReviewStartResult,
   RuntimeActionApprovalDecisionSubmitPayload,
 } from './electron';
 
@@ -367,6 +369,10 @@ function MissionControlView() {
   const [missionInspecting, setMissionInspecting] = useState(false);
   const [missionResult, setMissionResult] = useState<MissionRepoReadinessResult | null>(null);
   const [missionError, setMissionError] = useState<string | null>(null);
+  const [missionReviewStarting, setMissionReviewStarting] = useState(false);
+  const [missionReviewStart, setMissionReviewStart] = useState<MissionRepoReviewStartResult | null>(null);
+  const [missionReviewTranscript, setMissionReviewTranscript] = useState<string[]>([]);
+  const [missionReviewError, setMissionReviewError] = useState<string | null>(null);
 
   const inspectRepoReadiness = async () => {
     if (!window.conductor?.missions?.inspectRepoReadiness) return;
@@ -383,6 +389,45 @@ function MissionControlView() {
       setMissionError('Read-only repo inspection failed safely. No commands were executed.');
     } finally {
       setMissionInspecting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!window.conductor?.agents?.onRunEvent) return undefined;
+    return window.conductor.agents.onRunEvent((event: AgentRunEvent) => {
+      setMissionReviewStart((current) => {
+        if (!current?.runId || event.runId !== current.runId) return current;
+        if (event.type === 'stdout' || event.type === 'stderr') {
+          setMissionReviewTranscript((entries) => [...entries, `${event.type}: ${event.chunk}`].slice(-80));
+        }
+        if (event.type === 'error') {
+          setMissionReviewTranscript((entries) => [...entries, `error: ${event.message}`].slice(-80));
+        }
+        if (event.type === 'status') {
+          setMissionReviewTranscript((entries) => [...entries, `status: ${event.status}`].slice(-80));
+        }
+        return current;
+      });
+    });
+  }, []);
+
+  const startReadOnlyRepoReview = async () => {
+    if (!window.conductor?.missions?.startReadOnlyRepoReview) return;
+    setMissionReviewStarting(true);
+    setMissionReviewError(null);
+    setMissionReviewTranscript([]);
+    try {
+      const result = await window.conductor.missions.startReadOnlyRepoReview(missionRepoPath);
+      if (result.rendererCanExecuteArbitraryActions || result.executedShell) {
+        throw new Error('Mission bridge returned an unsafe execution result');
+      }
+      setMissionReviewStart(result);
+      setMissionReviewTranscript([result.message]);
+    } catch {
+      setMissionReviewStart(null);
+      setMissionReviewError('Read-only repo review mission failed safely before agent launch or during native approval.');
+    } finally {
+      setMissionReviewStarting(false);
     }
   };
   const missionRiskNotes = missionResult?.summary.riskNotes ?? [];
@@ -456,7 +501,7 @@ function MissionControlView() {
           <div className="mission-readiness-list">
             <MissionReadinessRow label="Agent runtimes" value="Use Agent Runtimes for live local readiness" tone="ok" />
             <MissionReadinessRow label="Read-only repo inspector" value={desktopAvailable ? 'Available in desktop bridge' : 'Requires desktop bridge'} tone={desktopAvailable ? 'ok' : 'warn'} />
-            <MissionReadinessRow label="Agent mission runner" value="Not connected" tone="warn" />
+            <MissionReadinessRow label="Agent mission runner" value="Native-approved Codex read-only recipe available" tone="ok" />
             <MissionReadinessRow label="Deliverable store" value="Not connected" tone="muted" />
           </div>
         </section>
@@ -473,13 +518,31 @@ function MissionControlView() {
         <section className="card mission-panel">
           <span className="eyebrow">Next safe action</span>
           <div className="mission-approval-box">
-            <strong>Generate review plan</strong>
-            <span>Preview only. This future step should turn metadata into a deterministic review checklist before any agent is launched.</span>
+            <strong>Start approved repo review</strong>
+            <span>Native approval required. Fixed runtime: Codex CLI read-only. Electron main owns the prompt and the allowlisted recipe.</span>
           </div>
-          <div className="actions">
-            <button className="btn-ghost" disabled>Preview only</button>
-            <span className="hint">No mission planner bridge exists yet.</span>
+          <div className="actions mission-readiness-actions">
+            <button
+              className="btn-ghost primary"
+              onClick={startReadOnlyRepoReview}
+              disabled={!desktopAvailable || !missionRepoPath.trim() || missionReviewStarting || !missionResult || !window.conductor?.missions?.startReadOnlyRepoReview}
+            >
+              {missionReviewStarting ? 'Requesting approval...' : 'Start approved repo review'}
+            </button>
+            <span className="hint mission-action-safety-hint">Native approval required. No generic mission execution channel.</span>
           </div>
+          {missionReviewError && <p className="empty-state">{missionReviewError}</p>}
+          {missionReviewStart && (
+            <div className="mission-result-box">
+              <div className="mission-result-heading">
+                <strong>Repo review mission: {missionReviewStart.status}</strong>
+                <span className="mission-score">{missionReviewStart.runtimeId}</span>
+              </div>
+              <span>{missionReviewStart.message}</span>
+              <span>Native approval: {missionReviewStart.nativeApproval.confirmed ? 'confirmed' : 'cancelled'}</span>
+              {missionReviewTranscript.length > 0 && <pre className="mission-review-transcript">{missionReviewTranscript.join('\n')}</pre>}
+            </div>
+          )}
         </section>
 
         <section className="card mission-panel mission-timeline-panel">

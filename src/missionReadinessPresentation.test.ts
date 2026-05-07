@@ -16,10 +16,11 @@ describe('Mission readiness presentation', () => {
     expect(appSource).toContain('No risk notes detected from allowlisted metadata.');
   });
 
-  it('presents the next safe action as disabled preview only', () => {
+  it('presents the next safe action as a native-approved read-only repo review', () => {
     expect(appSource).toContain('Next safe action');
-    expect(appSource).toContain('Generate review plan');
-    expect(appSource).toContain('disabled>Preview only');
+    expect(appSource).toContain('Start approved repo review');
+    expect(appSource).toContain('Native approval required');
+    expect(appSource).toContain('Fixed runtime: Codex CLI read-only');
     expect(appSource).not.toContain('window.conductor?.missions?.generateReviewPlan');
     expect(appSource).not.toContain('missions:generateReviewPlan');
   });

@@ -45,6 +45,7 @@ const conductorApi = {
   },
   missions: {
     inspectRepoReadiness: (projectPath) => ipcRenderer.invoke('missions:inspectRepoReadiness', { projectPath }),
+    startReadOnlyRepoReview: (projectPath) => ipcRenderer.invoke('missions:startReadOnlyRepoReview', { projectPath }),
   },
 };
 

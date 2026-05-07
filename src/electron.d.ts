@@ -336,6 +336,25 @@ export type MissionRepoReadinessResult = {
   message: string;
 };
 
+export type MissionRepoReviewStartResult = {
+  schemaVersion: 1;
+  status: 'started' | 'cancelled';
+  desktopApi: 'mission.startReadOnlyRepoReview';
+  missionType: 'read_only_repo_review';
+  correlationId: string;
+  runtimeId: 'codex-cli';
+  runId?: string;
+  snapshot?: AgentRunSnapshot;
+  rendererCanExecuteArbitraryActions: false;
+  executedShell: false;
+  nativeApproval: {
+    required: true;
+    shown: true;
+    confirmed: boolean;
+  };
+  message: string;
+};
+
 declare global {
   interface Window {
     conductor?: {
@@ -375,6 +394,7 @@ declare global {
       };
       missions: {
         inspectRepoReadiness: (projectPath: string) => Promise<MissionRepoReadinessResult>;
+        startReadOnlyRepoReview: (projectPath: string) => Promise<MissionRepoReviewStartResult>;
       };
     };
   }
