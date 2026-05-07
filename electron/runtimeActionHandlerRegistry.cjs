@@ -1,5 +1,9 @@
 const { collectLocalInventory: defaultCollectLocalInventory } = require('./systemInventory.cjs');
 const { appendRuntimeActionAuditEvents: defaultAppendRuntimeActionAuditEvents } = require('./runtimeActionAuditStore.cjs');
+const { execFile: nodeExecFile } = require('node:child_process');
+const { promisify } = require('node:util');
+
+const defaultExecFile = promisify(nodeExecFile);
 
 const DOCUMENTATION_URLS = {
   'claude-code': 'https://docs.anthropic.com/en/docs/claude-code',
@@ -7,6 +11,17 @@ const DOCUMENTATION_URLS = {
   'gemini-cli': 'https://github.com/google-gemini/gemini-cli',
   'hermes-agent': 'https://hermes-agent.nousresearch.com/docs',
   openclaw: 'https://github.com/outsourc-e/OpenClaw',
+};
+
+const HEALTH_CHECKS = {
+  'hermes-agent': {
+    'hermes-version': {
+      command: 'hermes',
+      args: ['--version'],
+      timeout: 5000,
+      commandLabel: 'hermes --version',
+    },
+  },
 };
 
 const ALLOWLISTED_DESKTOP_APIS = new Set([
@@ -35,7 +50,17 @@ function listRuntimeActionHandlerRegistry() {
         auditRequired: true,
         reason: 'Refreshes sanitized desktop inventory through the existing Electron main inventory collector. No shell command or renderer-provided command is accepted.',
       },
-      'runtime.runHealthCheck': plannedHandler('runtime.runHealthCheck'),
+      'runtime.runHealthCheck': {
+        desktopApi: 'runtime.runHealthCheck',
+        status: 'implemented',
+        executable: true,
+        executionKind: 'constrained_health_check',
+        acceptsRendererCommand: false,
+        requiresShell: false,
+        requiresNativeConfirmation: false,
+        auditRequired: true,
+        reason: 'Runs one exact allowlisted health check through execFile with shell:false. Renderer supplies runtime id and health check id only, never command text or args.',
+      },
       'runtime.openDocumentation': {
         desktopApi: 'runtime.openDocumentation',
         status: 'implemented',
@@ -81,6 +106,10 @@ async function executeAllowlistedRuntimeAction(payload, deps = {}) {
 
   if (request.desktopApi === 'runtime.openDocumentation') {
     return executeOpenDocumentation(request, deps);
+  }
+
+  if (request.desktopApi === 'runtime.runHealthCheck') {
+    return executeHealthCheck(request, deps);
   }
 
   throw new Error(`No executable allowlisted handler for ${request.desktopApi}`);
@@ -166,6 +195,65 @@ async function executeOpenDocumentation(request, deps = {}) {
   };
 }
 
+async function executeHealthCheck(request, deps = {}) {
+  const execFile = deps.execFile || defaultExecFile;
+  const appendRuntimeActionAuditEvents = deps.appendRuntimeActionAuditEvents || defaultAppendRuntimeActionAuditEvents;
+  const now = deps.now || (() => new Date().toISOString());
+  const runtimeId = sanitizeRuntimeId(request.runtimeId);
+  const healthCheckId = sanitizeToken(request.healthCheckId, '');
+  const spec = HEALTH_CHECKS[runtimeId]?.[healthCheckId];
+  if (!spec) throw new Error('Health check is not implemented in the exact allowlist');
+
+  const occurredAt = now();
+  let output;
+  let status = 'succeeded';
+  let message = 'Health check completed through an exact allowlisted Electron main handler.';
+  try {
+    output = await execFile(spec.command, spec.args, {
+      shell: false,
+      timeout: spec.timeout,
+      windowsHide: true,
+      maxBuffer: 64 * 1024,
+    });
+  } catch (error) {
+    status = 'failed';
+    output = { stdout: error?.stdout || '', stderr: error?.stderr || '' };
+    message = sanitizeOutput(error?.message || 'Health check failed');
+  }
+
+  const stdoutPreview = sanitizeOutput(output?.stdout || '');
+  const stderrPreview = sanitizeOutput(output?.stderr || '');
+  appendRuntimeActionAuditEvents([
+    buildAuditEvent({
+      eventType: 'runtime_action_completed',
+      occurredAt,
+      correlationId: request.correlationId,
+      runtimeId,
+      actionKind: 'health_check',
+      outcome: status,
+      payloadSummary: `Run ${healthCheckId} for ${runtimeId} using exact allowlisted command label ${spec.commandLabel}.`,
+      resultMessage: status === 'succeeded' ? 'Health check completed without shell execution.' : message,
+    }),
+  ]);
+
+  return {
+    schemaVersion: 1,
+    status,
+    desktopApi: 'runtime.runHealthCheck',
+    correlationId: request.correlationId,
+    runtimeId,
+    actionKind: 'health_check',
+    healthCheckId,
+    commandLabel: spec.commandLabel,
+    source: request.source,
+    rendererCanExecuteArbitraryActions: false,
+    executedShell: false,
+    stdoutPreview,
+    stderrPreview,
+    message,
+  };
+}
+
 function resolveDocumentationUrl(docsTarget, deps = {}) {
   const recipe = typeof deps.listIntegrationRecipes === 'function'
     ? deps.listIntegrationRecipes().find((item) => item.id === docsTarget)
@@ -179,6 +267,12 @@ function sanitizeDocsTarget(value) {
   throw new Error('Invalid documentation target');
 }
 
+function sanitizeRuntimeId(value) {
+  const text = String(value || '');
+  if (/^[a-z0-9-]{1,60}$/.test(text)) return text;
+  throw new Error('Invalid runtime id');
+}
+
 function isAllowlistedHttpsUrl(value) {
   if (typeof value !== 'string') return false;
   try {
@@ -187,6 +281,16 @@ function isAllowlistedHttpsUrl(value) {
   } catch {
     return false;
   }
+}
+
+function sanitizeOutput(value) {
+  return String(value || '')
+    .replace(/\/Users\/[^\s/]+/g, '[redacted-home]')
+    .replace(/\/home\/[^\s/]+/g, '[redacted-home]')
+    .replace(/\/root\b/g, '[redacted-home]')
+    .replace(/token[=:\s]+[^\s]+/gi, 'token=[redacted]')
+    .trim()
+    .slice(0, 2000);
 }
 
 function validateRuntimeActionRequest(payload) {
@@ -205,6 +309,8 @@ function validateRuntimeActionRequest(payload) {
     source: sanitizeToken(payload.source || 'renderer', 'renderer'),
     correlationId: sanitizeToken(payload.correlationId || `corr_${Date.now()}`, `corr_${Date.now()}`),
     docsTarget: payload.docsTarget,
+    runtimeId: payload.runtimeId,
+    healthCheckId: payload.healthCheckId,
   };
 }
 

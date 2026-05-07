@@ -41,6 +41,7 @@ const conductorApi = {
     getNativeConfirmations: () => ipcRenderer.invoke('runtimeActions:getNativeConfirmations'),
     refreshInventory: () => ipcRenderer.invoke('runtimeActions:refreshInventory'),
     openDocumentation: (docsTarget) => ipcRenderer.invoke('runtimeActions:openDocumentation', { docsTarget }),
+    runHealthCheck: (runtimeId, healthCheckId) => ipcRenderer.invoke('runtimeActions:runHealthCheck', { runtimeId, healthCheckId }),
   },
 };
 

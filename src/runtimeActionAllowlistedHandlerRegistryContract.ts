@@ -29,6 +29,7 @@ export type RuntimeActionAllowlistedHandlerRegistryContract = {
     executeChannel: null;
     refreshInventoryChannel: 'runtimeActions:refreshInventory';
     openDocumentationChannel: 'runtimeActions:openDocumentation';
+    runHealthCheckChannel: 'runtimeActions:runHealthCheck';
   };
   handlers: RuntimeActionAllowlistedHandlerContract[];
   guardrails: string[];
@@ -47,17 +48,19 @@ export type RuntimeActionHandlerRegistryValidation =
   | { valid: true; reason: string }
   | { valid: false; reason: string };
 
-const HARMLESS_EXECUTABLE_APIS: AllowlistedRuntimeActionApi[] = [
+const IMPLEMENTED_EXECUTABLE_APIS: AllowlistedRuntimeActionApi[] = [
   'runtime.refreshInventory',
   'runtime.openDocumentation',
+  'runtime.runHealthCheck',
 ];
 
 const HANDLER_REGISTRY_GUARDRAILS = [
-  'Only runtime.refreshInventory and runtime.openDocumentation have executable handlers.',
+  'Only runtime.refreshInventory, runtime.openDocumentation, and runtime.runHealthCheck have executable handlers.',
   'Renderer cannot register handlers or invoke a generic runtime action executor.',
   'The refresh inventory handler accepts no renderer command, args, shell, path, or environment payload.',
   'The open documentation handler accepts only a recipe id and resolves exact allowlisted HTTPS URLs in Electron main.',
-  'All command-capable or mutating handlers remain planned and non-executable until separate implementation approval.',
+  'The health check handler accepts only a runtime id and health check id; Electron main owns the exact command and uses shell:false.',
+  'All other command-capable or mutating handlers remain planned and non-executable until separate implementation approval.',
 ];
 
 function implementedRefreshInventoryHandler(): RuntimeActionAllowlistedHandlerContract {
@@ -92,6 +95,22 @@ function implementedOpenDocumentationHandler(): RuntimeActionAllowlistedHandlerC
   };
 }
 
+function implementedHealthCheckHandler(): RuntimeActionAllowlistedHandlerContract {
+  return {
+    desktopApi: 'runtime.runHealthCheck',
+    status: 'implemented',
+    owner: 'electron_main',
+    executable: true,
+    rendererCanInvoke: true,
+    acceptsRendererCommand: false,
+    requiresShell: false,
+    requiresApprovalDecision: false,
+    requiresNativeConfirmation: false,
+    requiresSeparateImplementationApproval: false,
+    reason: 'Run health check is implemented for one constrained Hermes version check only. The renderer supplies runtime id and health check id; Electron main owns the exact command, runs with shell:false, sanitizes output, and records audit events.',
+  };
+}
+
 function plannedHandler(desktopApi: AllowlistedRuntimeActionApi): RuntimeActionAllowlistedHandlerContract {
   return {
     desktopApi,
@@ -122,10 +141,12 @@ export function buildRuntimeActionAllowlistedHandlerRegistryContract(): RuntimeA
       executeChannel: null,
       refreshInventoryChannel: 'runtimeActions:refreshInventory',
       openDocumentationChannel: 'runtimeActions:openDocumentation',
+      runHealthCheckChannel: 'runtimeActions:runHealthCheck',
     },
     handlers: ALLOWLISTED_RUNTIME_ACTION_APIS.map((api) => {
       if (api === 'runtime.refreshInventory') return implementedRefreshInventoryHandler();
       if (api === 'runtime.openDocumentation') return implementedOpenDocumentationHandler();
+      if (api === 'runtime.runHealthCheck') return implementedHealthCheckHandler();
       return plannedHandler(api);
     }),
     guardrails: HANDLER_REGISTRY_GUARDRAILS,
@@ -139,12 +160,21 @@ export function buildRuntimeActionHandlerReadinessReport(
   const executableHandlerCount = contract.handlers.filter((handler) => handler.executable).length;
   return {
     schemaVersion: 1,
-    readyForExecution: implementedHandlerCount === 2 && executableHandlerCount === 2,
+    readyForExecution: implementedHandlerCount === 3 && executableHandlerCount === 3,
     implementedHandlerCount,
     executableHandlerCount,
     totalAllowlistedHandlerCount: contract.handlers.length,
-    message: 'Only runtime.refreshInventory and runtime.openDocumentation are executable. Command-capable runtime actions remain unavailable until separately approved and implemented.',
+    message: 'Only runtime.refreshInventory, runtime.openDocumentation, and runtime.runHealthCheck are executable. Other command-capable runtime actions remain unavailable until separately approved and implemented.',
   };
+}
+
+function implementedHandlerValid(handler: RuntimeActionAllowlistedHandlerContract): boolean {
+  return handler.status === 'implemented'
+    && handler.executable === true
+    && handler.rendererCanInvoke === true
+    && handler.acceptsRendererCommand === false
+    && handler.requiresShell === false
+    && handler.requiresSeparateImplementationApproval === false;
 }
 
 export function validateRuntimeActionHandlerRegistryContract(
@@ -165,42 +195,23 @@ export function validateRuntimeActionHandlerRegistryContract(
   if (contract.ipc.openDocumentationChannel !== 'runtimeActions:openDocumentation') {
     return { valid: false, reason: 'Open documentation must use the narrow runtimeActions:openDocumentation IPC channel.' };
   }
-
-  const refreshHandlers = contract.handlers.filter((handler) => handler.desktopApi === 'runtime.refreshInventory');
-  if (refreshHandlers.length !== 1) return { valid: false, reason: 'Exactly one refresh inventory handler must be defined.' };
-  const [refresh] = refreshHandlers;
-  if (
-    refresh.status !== 'implemented'
-    || refresh.executable !== true
-    || refresh.rendererCanInvoke !== true
-    || refresh.acceptsRendererCommand !== false
-    || refresh.requiresShell !== false
-    || refresh.requiresSeparateImplementationApproval !== false
-  ) {
-    return { valid: false, reason: 'Refresh inventory must be a harmless executable handler and must not accept commands or shell execution.' };
+  if (contract.ipc.runHealthCheckChannel !== 'runtimeActions:runHealthCheck') {
+    return { valid: false, reason: 'Run health check must use the narrow runtimeActions:runHealthCheck IPC channel.' };
   }
 
-  const docsHandlers = contract.handlers.filter((handler) => handler.desktopApi === 'runtime.openDocumentation');
-  if (docsHandlers.length !== 1) return { valid: false, reason: 'Exactly one open documentation handler must be defined.' };
-  const [docs] = docsHandlers;
-  if (
-    docs.status !== 'implemented'
-    || docs.executable !== true
-    || docs.rendererCanInvoke !== true
-    || docs.acceptsRendererCommand !== false
-    || docs.requiresShell !== false
-    || docs.requiresSeparateImplementationApproval !== false
-  ) {
-    return { valid: false, reason: 'Open documentation must be a harmless executable handler and must not accept commands, raw URLs, or shell execution.' };
+  for (const desktopApi of IMPLEMENTED_EXECUTABLE_APIS) {
+    const handlers = contract.handlers.filter((handler) => handler.desktopApi === desktopApi);
+    if (handlers.length !== 1) return { valid: false, reason: `Exactly one ${desktopApi} handler must be defined.` };
+    if (!implementedHandlerValid(handlers[0])) return { valid: false, reason: `${desktopApi} must be implemented without renderer commands or shell execution.` };
   }
 
-  const unsafeImplemented = contract.handlers.some((handler) => !HARMLESS_EXECUTABLE_APIS.includes(handler.desktopApi)
+  const unsafeImplemented = contract.handlers.some((handler) => !IMPLEMENTED_EXECUTABLE_APIS.includes(handler.desktopApi)
     && (handler.status !== 'planned_not_implemented' || handler.executable || handler.rendererCanInvoke));
   if (unsafeImplemented) {
-    return { valid: false, reason: 'Only refresh inventory and open documentation may be implemented in this slice.' };
+    return { valid: false, reason: 'Only refresh inventory, open documentation, and the constrained health check may be implemented in this slice.' };
   }
   if (contract.handlers.some((handler) => handler.acceptsRendererCommand || handler.requiresShell)) {
     return { valid: false, reason: 'No runtime action handler may accept renderer commands or require shell execution in this contract.' };
   }
-  return { valid: true, reason: 'Handler registry exposes only harmless refresh inventory and open documentation actions and no generic execution surface.' };
+  return { valid: true, reason: 'Handler registry exposes only refresh inventory, open documentation, and constrained health check actions and no generic execution surface.' };
 }

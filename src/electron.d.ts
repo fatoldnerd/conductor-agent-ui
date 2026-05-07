@@ -293,6 +293,23 @@ export type RuntimeActionOpenDocumentationResult = {
   message: string;
 };
 
+export type RuntimeActionHealthCheckResult = {
+  schemaVersion: 1;
+  status: 'succeeded' | 'failed';
+  desktopApi: 'runtime.runHealthCheck';
+  correlationId: string;
+  runtimeId: string;
+  actionKind: 'health_check';
+  source: string;
+  healthCheckId: string;
+  commandLabel: string;
+  rendererCanExecuteArbitraryActions: false;
+  executedShell: false;
+  stdoutPreview: string;
+  stderrPreview: string;
+  message: string;
+};
+
 declare global {
   interface Window {
     conductor?: {
@@ -328,6 +345,7 @@ declare global {
         getNativeConfirmations: () => Promise<RuntimeActionNativeConfirmationReadResult>;
         refreshInventory: () => Promise<RuntimeActionRefreshInventoryResult>;
         openDocumentation: (docsTarget: string) => Promise<RuntimeActionOpenDocumentationResult>;
+        runHealthCheck: (runtimeId: string, healthCheckId: string) => Promise<RuntimeActionHealthCheckResult>;
       };
     };
   }

@@ -425,6 +425,18 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
       window.open(action.docsUrl, '_blank', 'noopener,noreferrer');
       return;
     }
+    if (action.kind === 'health_check') {
+      const healthCheckTarget = item.recipeId;
+      const healthCheckId = item.healthChecks[0]?.id;
+      if (
+        healthCheckTarget === 'hermes-agent'
+        && healthCheckId === 'hermes-version'
+        && window.conductor?.runtimeActions?.runHealthCheck
+      ) {
+        await window.conductor.runtimeActions.runHealthCheck(healthCheckTarget, healthCheckId);
+        return;
+      }
+    }
     if (!item.recipeId) return;
     setSelectedRecipeId(item.recipeId);
     setSelectedAction(action.kind);

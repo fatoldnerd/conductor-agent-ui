@@ -5,7 +5,7 @@ import {
 } from './runtimeActionHandlerRegistry.cjs';
 
 describe('runtime action handler registry', () => {
-  it('registers only the harmless refresh inventory handler as executable', () => {
+  it('registers only explicitly implemented safe handlers as executable', () => {
     const registry = listRuntimeActionHandlerRegistry();
 
     expect(registry.schemaVersion).toBe(1);
@@ -18,9 +18,19 @@ describe('runtime action handler registry', () => {
       acceptsRendererCommand: false,
       requiresShell: false,
     });
+    expect(registry.handlers['runtime.openDocumentation']).toMatchObject({
+      desktopApi: 'runtime.openDocumentation',
+      executable: true,
+      executionKind: 'harmless_open_https_documentation',
+      acceptsRendererCommand: false,
+      requiresShell: false,
+    });
     expect(registry.handlers['runtime.runHealthCheck']).toMatchObject({
-      executable: false,
-      status: 'planned_not_implemented',
+      desktopApi: 'runtime.runHealthCheck',
+      executable: true,
+      executionKind: 'constrained_health_check',
+      acceptsRendererCommand: false,
+      requiresShell: false,
     });
   });
 
@@ -93,12 +103,57 @@ describe('runtime action handler registry', () => {
     )).rejects.toThrow('Documentation URL is not an allowlisted HTTPS URL');
   });
 
-  it('rejects renderer attempts to execute arbitrary or unimplemented actions', async () => {
+  it('runs only the constrained Hermes version health check without shell execution', async () => {
+    const execFile = vi.fn(async (command, args, options) => {
+      expect(command).toBe('hermes');
+      expect(args).toEqual(['--version']);
+      expect(options).toMatchObject({ shell: false, timeout: 5000 });
+      return { stdout: 'hermes 0.8.0\n', stderr: '' };
+    });
+    const appendRuntimeActionAuditEvents = vi.fn(() => ({ schemaVersion: 1, status: 'ready', events: [], message: 'ok' }));
+
+    const result = await executeAllowlistedRuntimeAction({
+      desktopApi: 'runtime.runHealthCheck',
+      runtimeId: 'hermes-agent',
+      healthCheckId: 'hermes-version',
+      source: 'renderer',
+      correlationId: 'corr_health_1',
+    }, {
+      execFile,
+      appendRuntimeActionAuditEvents,
+      now: () => '2026-05-07T09:35:00.000Z',
+    });
+
+    expect(execFile).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      schemaVersion: 1,
+      status: 'succeeded',
+      desktopApi: 'runtime.runHealthCheck',
+      runtimeId: 'hermes-agent',
+      healthCheckId: 'hermes-version',
+      commandLabel: 'hermes --version',
+      executedShell: false,
+      rendererCanExecuteArbitraryActions: false,
+      stdoutPreview: 'hermes 0.8.0',
+    });
+    expect(appendRuntimeActionAuditEvents).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(appendRuntimeActionAuditEvents.mock.calls[0][0])).not.toContain('/root/');
+  });
+
+  it('rejects health checks outside the exact Electron-main allowlist', async () => {
     await expect(executeAllowlistedRuntimeAction({
       desktopApi: 'runtime.runHealthCheck',
+      runtimeId: 'codex-cli',
+      healthCheckId: 'codex-version',
       source: 'renderer',
-    })).rejects.toThrow('No executable allowlisted handler for runtime.runHealthCheck');
+      correlationId: 'corr_health_2',
+    }, {
+      execFile: async () => { throw new Error('should not execute'); },
+      appendRuntimeActionAuditEvents: () => ({ schemaVersion: 1, status: 'ready', events: [], message: 'ok' }),
+    })).rejects.toThrow('Health check is not implemented in the exact allowlist');
+  });
 
+  it('rejects renderer attempts to execute arbitrary actions', async () => {
     await expect(executeAllowlistedRuntimeAction({
       desktopApi: 'runtime.refreshInventory',
       source: 'renderer',

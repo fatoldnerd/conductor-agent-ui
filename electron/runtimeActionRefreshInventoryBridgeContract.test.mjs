@@ -11,6 +11,8 @@ describe('runtime action refresh inventory bridge contract', () => {
     expect(preloadSource).toContain("ipcRenderer.invoke('runtimeActions:refreshInventory')");
     expect(preloadSource).toContain('openDocumentation');
     expect(preloadSource).toContain("ipcRenderer.invoke('runtimeActions:openDocumentation'");
+    expect(preloadSource).toContain('runHealthCheck');
+    expect(preloadSource).toContain("ipcRenderer.invoke('runtimeActions:runHealthCheck'");
     expect(preloadSource).not.toContain('runtimeActions:execute');
     expect(preloadSource).not.toContain('executeRuntimeAction');
   });
@@ -18,8 +20,10 @@ describe('runtime action refresh inventory bridge contract', () => {
   it('registers a trusted sender main handler using the allowlisted registry', () => {
     expect(mainSource).toContain("ipcMain.handle('runtimeActions:refreshInventory'");
     expect(mainSource).toContain("ipcMain.handle('runtimeActions:openDocumentation'");
+    expect(mainSource).toContain("ipcMain.handle('runtimeActions:runHealthCheck'");
     expect(mainSource).toContain('executeAllowlistedRuntimeAction');
     expect(mainSource).toContain("desktopApi: 'runtime.refreshInventory'");
+    expect(mainSource).toContain("desktopApi: 'runtime.runHealthCheck'");
     expect(mainSource).not.toContain("ipcMain.handle('runtimeActions:execute'");
   });
 });

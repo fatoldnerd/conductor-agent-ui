@@ -7,7 +7,7 @@ import {
 import { ALLOWLISTED_RUNTIME_ACTION_APIS } from './runtimeActionAllowlist';
 
 describe('runtime action allowlisted handler registry contract', () => {
-  it('documents refresh inventory and open documentation as the only implemented harmless handlers', () => {
+  it('documents refresh inventory, open docs, and constrained health check as the only implemented handlers', () => {
     const contract = buildRuntimeActionAllowlistedHandlerRegistryContract();
 
     expect(contract).toMatchObject({
@@ -23,12 +23,14 @@ describe('runtime action allowlisted handler registry contract', () => {
         registerChannel: null,
         refreshInventoryChannel: 'runtimeActions:refreshInventory',
         openDocumentationChannel: 'runtimeActions:openDocumentation',
+        runHealthCheckChannel: 'runtimeActions:runHealthCheck',
       },
 
     });
     expect(contract.handlers.map((handler) => handler.desktopApi).sort()).toEqual([...ALLOWLISTED_RUNTIME_ACTION_APIS].sort());
     const refresh = contract.handlers.find((handler) => handler.desktopApi === 'runtime.refreshInventory');
     const docs = contract.handlers.find((handler) => handler.desktopApi === 'runtime.openDocumentation');
+    const health = contract.handlers.find((handler) => handler.desktopApi === 'runtime.runHealthCheck');
     expect(refresh).toMatchObject({
       status: 'implemented',
       executable: true,
@@ -45,22 +47,30 @@ describe('runtime action allowlisted handler registry contract', () => {
       requiresShell: false,
       requiresSeparateImplementationApproval: false,
     });
+    expect(health).toMatchObject({
+      status: 'implemented',
+      executable: true,
+      rendererCanInvoke: true,
+      acceptsRendererCommand: false,
+      requiresShell: false,
+      requiresSeparateImplementationApproval: false,
+    });
     expect(contract.handlers
-      .filter((handler) => !['runtime.refreshInventory', 'runtime.openDocumentation'].includes(handler.desktopApi))
+      .filter((handler) => !['runtime.refreshInventory', 'runtime.openDocumentation', 'runtime.runHealthCheck'].includes(handler.desktopApi))
       .every((handler) => handler.status === 'planned_not_implemented' && handler.executable === false)).toBe(true);
   });
 
-  it('builds a readiness report that allows only harmless inventory refresh and open docs execution', () => {
+  it('builds a readiness report that allows only implemented safe runtime actions', () => {
     const report = buildRuntimeActionHandlerReadinessReport(buildRuntimeActionAllowlistedHandlerRegistryContract());
 
     expect(report).toMatchObject({
       schemaVersion: 1,
       readyForExecution: true,
-      implementedHandlerCount: 2,
-      executableHandlerCount: 2,
+      implementedHandlerCount: 3,
+      executableHandlerCount: 3,
       totalAllowlistedHandlerCount: ALLOWLISTED_RUNTIME_ACTION_APIS.length,
     });
-    expect(report.message).toContain('Only runtime.refreshInventory and runtime.openDocumentation are executable');
+    expect(report.message).toContain('Only runtime.refreshInventory, runtime.openDocumentation, and runtime.runHealthCheck are executable');
   });
 
   it('rejects generic execution or shell-capable handler registry contracts', () => {
@@ -79,7 +89,7 @@ describe('runtime action allowlisted handler registry contract', () => {
 
     expect(validateRuntimeActionHandlerRegistryContract(contract)).toEqual({
       valid: true,
-      reason: 'Handler registry exposes only harmless refresh inventory and open documentation actions and no generic execution surface.',
+      reason: 'Handler registry exposes only refresh inventory, open documentation, and constrained health check actions and no generic execution surface.',
     });
     expect(validateRuntimeActionHandlerRegistryContract(invalid as never).valid).toBe(false);
     expect(validateRuntimeActionHandlerRegistryContract(invalidShell as never).valid).toBe(false);
