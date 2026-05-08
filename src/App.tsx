@@ -85,6 +85,17 @@ const TITLES: Record<View, { title: string; crumb: string }> = {
   diagnostics: { title: 'Diagnostics', crumb: 'Desktop readiness checks' },
 };
 
+const CONDUCTOR_REPO_REVIEW_HISTORY_KEY = 'conductor.repoReviewMissionHistory.v1';
+
+type RepoReviewMissionHistoryEntry = {
+  runId: string;
+  repoName: string;
+  runtimeId: string;
+  status: string;
+  completedAt: string;
+  deliverablePreview: string;
+};
+
 export default function App() {
   const [view, setView] = useState<View>('tools');
 
@@ -441,6 +452,18 @@ function MissionControlView() {
   const missionReadinessLabel = missionResult ? formatMissionReadinessLabel(missionResult.summary.readiness) : null;
   const missionReviewDeliverable = buildRepoReviewDeliverable(missionReviewTranscript);
 
+  useEffect(() => {
+    if (missionReviewLifecycle !== 'completed' || !missionReviewStart || !missionResult) return;
+    persistRepoReviewMissionHistory({
+      runId: missionReviewStart.runId ?? missionReviewStart.correlationId,
+      repoName: missionResult.repoName,
+      runtimeId: missionReviewStart.runtimeId,
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+      deliverablePreview: missionReviewDeliverable.slice(0, 1000),
+    });
+  }, [missionReviewDeliverable, missionReviewLifecycle, missionReviewStart, missionResult]);
+
   return (
     <div className="mission-control-page">
       <div className="card mission-hero">
@@ -616,6 +639,31 @@ function buildRepoReviewDeliverable(transcript: string[]) {
     .filter(Boolean);
   if (!stdoutLines.length) return '';
   return stdoutLines.join('\n').slice(-6000).trim();
+}
+
+function persistRepoReviewMissionHistory(entry: RepoReviewMissionHistoryEntry) {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  const existing = readRepoReviewMissionHistory();
+  const withoutDuplicate = existing.filter((item) => item.runId !== entry.runId);
+  const next = [entry, ...withoutDuplicate].slice(0, 20);
+  window.localStorage.setItem(CONDUCTOR_REPO_REVIEW_HISTORY_KEY, JSON.stringify(next));
+}
+
+function readRepoReviewMissionHistory(): RepoReviewMissionHistoryEntry[] {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(CONDUCTOR_REPO_REVIEW_HISTORY_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isRepoReviewMissionHistoryEntry).slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
+function isRepoReviewMissionHistoryEntry(value: unknown): value is RepoReviewMissionHistoryEntry {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entry = value as Partial<RepoReviewMissionHistoryEntry>;
+  return Boolean(entry.runId && entry.repoName && entry.runtimeId && entry.status && entry.completedAt);
 }
 
 function MissionReadinessRow({ label, value, tone }: { label: string; value: string; tone: 'ok' | 'warn' | 'muted' }) {
@@ -1407,6 +1455,7 @@ function ActivityView() {
   const [approvalDecisionSubmittingDecision, setApprovalDecisionSubmittingDecision] = useState<RuntimeActionApprovalDecisionSubmitPayload['decision'] | null>(null);
   const [approvalDecisionSubmitError, setApprovalDecisionSubmitError] = useState<string | null>(null);
   const [approvalDecisionSubmitMessage, setApprovalDecisionSubmitMessage] = useState<string | null>(null);
+  const [repoReviewHistory, setRepoReviewHistory] = useState<RepoReviewMissionHistoryEntry[]>(() => readRepoReviewMissionHistory());
 
   const loadRuntimeActionHistory = async () => {
     if (!window.conductor?.runtimeActions) return;
@@ -1518,6 +1567,7 @@ function ActivityView() {
     loadRuntimeActionApprovalQueue();
     loadRuntimeActionApprovalDecisionHistory();
     loadRuntimeActionNativeConfirmationHistory();
+    setRepoReviewHistory(readRepoReviewMissionHistory());
   }, []);
 
   const runtimeActionHistorySource = useMemo(
@@ -1581,9 +1631,33 @@ function ActivityView() {
 
       <div className="runtime-overview-grid">
         <RuntimeMetric label="History entries" value={runtimeActionHistory.stats.total} />
+        <RuntimeMetric label="Repo reviews" value={repoReviewHistory.length} />
         <RuntimeMetric label="Pending approval" value={runtimeActionHistory.stats.pendingApproval} />
-        <RuntimeMetric label="Blocked" value={runtimeActionHistory.stats.blocked} />
         <RuntimeMetric label="Completed" value={runtimeActionHistory.stats.completed} />
+      </div>
+
+      <div className="card local-tool-section">
+        <div className="section-head compact">
+          <h2>Repo review mission history</h2>
+          <span className="hint">Sanitized local mission metadata only</span>
+        </div>
+        {!repoReviewHistory.length ? (
+          <p className="empty-state">No repo review missions have been recorded yet. Conductor will not show fake mission history.</p>
+        ) : (
+          <div className="local-tool-list">
+            {repoReviewHistory.map((entry) => (
+              <div className="local-tool-row" key={entry.runId}>
+                <span className="status-dot ok" />
+                <div className="local-tool-main">
+                  <strong>{entry.repoName}</strong>
+                  <span>{entry.runtimeId} · {entry.status} · {entry.completedAt}</span>
+                  <em>{entry.deliverablePreview || 'Review completed without a captured deliverable preview.'}</em>
+                </div>
+                <span className="chip chip-ok">Repo review</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card local-tool-section">
