@@ -46,6 +46,7 @@ import type { RuntimeActionNativeConfirmationReadResult } from './electron';
 import { readinessLabel } from './runtimeReadiness';
 import type {
   AgentRunEvent,
+  AgentRunStatus,
   IntegrationInstallRun,
   LocalInventory,
   MissionRepoReadinessResult,
@@ -373,6 +374,7 @@ function MissionControlView() {
   const [missionReviewStart, setMissionReviewStart] = useState<MissionRepoReviewStartResult | null>(null);
   const [missionReviewTranscript, setMissionReviewTranscript] = useState<string[]>([]);
   const [missionReviewError, setMissionReviewError] = useState<string | null>(null);
+  const [missionReviewLifecycle, setMissionReviewLifecycle] = useState<'idle' | 'awaiting_approval' | 'approved' | 'running' | 'completed' | 'failed'>('idle');
 
   const inspectRepoReadiness = async () => {
     if (!window.conductor?.missions?.inspectRepoReadiness) return;
@@ -405,6 +407,7 @@ function MissionControlView() {
         }
         if (event.type === 'status') {
           setMissionReviewTranscript((entries) => [...entries, `status: ${event.status}`].slice(-80));
+          setMissionReviewLifecycle(mapRepoReviewLifecycle(event.status));
         }
         return current;
       });
@@ -416,15 +419,18 @@ function MissionControlView() {
     setMissionReviewStarting(true);
     setMissionReviewError(null);
     setMissionReviewTranscript([]);
+    setMissionReviewLifecycle('awaiting_approval');
     try {
       const result = await window.conductor.missions.startReadOnlyRepoReview(missionRepoPath);
       if (result.rendererCanExecuteArbitraryActions || result.executedShell) {
         throw new Error('Mission bridge returned an unsafe execution result');
       }
       setMissionReviewStart(result);
+      setMissionReviewLifecycle(result.nativeApproval.confirmed ? 'approved' : 'idle');
       setMissionReviewTranscript([result.message]);
     } catch {
       setMissionReviewStart(null);
+      setMissionReviewLifecycle('failed');
       setMissionReviewError('Read-only repo review mission failed safely before agent launch or during native approval.');
     } finally {
       setMissionReviewStarting(false);
@@ -433,6 +439,7 @@ function MissionControlView() {
   const missionRiskNotes = missionResult?.summary.riskNotes ?? [];
   const missionReadinessScore = missionResult ? calculateMissionReadinessScore(missionResult) : 0;
   const missionReadinessLabel = missionResult ? formatMissionReadinessLabel(missionResult.summary.readiness) : null;
+  const missionReviewDeliverable = buildRepoReviewDeliverable(missionReviewTranscript);
 
   return (
     <div className="mission-control-page">
@@ -511,11 +518,24 @@ function MissionControlView() {
                 {missionReviewStart && (
                   <div className="mission-result-box nested">
                     <div className="mission-result-heading">
-                      <strong>Repo review mission: {missionReviewStart.status}</strong>
+                      <strong>Repo review mission: {formatRepoReviewLifecycleLabel(missionReviewLifecycle)}</strong>
                       <span className="mission-score">{missionReviewStart.runtimeId}</span>
                     </div>
                     <span>{missionReviewStart.message}</span>
                     <span>Native approval: {missionReviewStart.nativeApproval.confirmed ? 'confirmed' : 'cancelled'}</span>
+                    <div className="mission-review-lifecycle">
+                      <span>{missionReviewStarting ? 'Awaiting native approval' : 'Approval confirmed'}</span>
+                      <span>{missionReviewLifecycle === 'running' ? 'Codex running' : formatRepoReviewLifecycleLabel(missionReviewLifecycle)}</span>
+                      <span>{missionReviewLifecycle === 'completed' ? 'Review completed' : missionReviewLifecycle === 'failed' ? 'Review failed' : 'Review report pending'}</span>
+                    </div>
+                    <div className="mission-review-deliverable">
+                      <strong>Review report deliverable</strong>
+                      {missionReviewDeliverable ? (
+                        <pre>{missionReviewDeliverable}</pre>
+                      ) : (
+                        <span>No review report captured yet.</span>
+                      )}
+                    </div>
                     {missionReviewTranscript.length > 0 && <pre className="mission-review-transcript">{missionReviewTranscript.join('\n')}</pre>}
                   </div>
                 )}
@@ -570,6 +590,32 @@ function calculateMissionReadinessScore(result: MissionRepoReadinessResult) {
   ];
   const baseScore = Math.round((checks.filter(Boolean).length / checks.length) * 100);
   return Math.max(0, baseScore - result.summary.riskNotes.length * 10);
+}
+
+function mapRepoReviewLifecycle(status: AgentRunStatus) {
+  if (status === 'starting') return 'approved';
+  if (status === 'running') return 'running';
+  if (status === 'succeeded') return 'completed';
+  if (status === 'failed' || status === 'cancelled') return 'failed';
+  return 'running';
+}
+
+function formatRepoReviewLifecycleLabel(state: 'idle' | 'awaiting_approval' | 'approved' | 'running' | 'completed' | 'failed') {
+  if (state === 'awaiting_approval') return 'Awaiting native approval';
+  if (state === 'approved') return 'Approval confirmed';
+  if (state === 'running') return 'Codex running';
+  if (state === 'completed') return 'Review completed';
+  if (state === 'failed') return 'Review failed';
+  return 'Ready to start';
+}
+
+function buildRepoReviewDeliverable(transcript: string[]) {
+  const stdoutLines = transcript
+    .filter((entry) => entry.startsWith('stdout:'))
+    .map((entry) => entry.replace(/^stdout:\s?/, '').trim())
+    .filter(Boolean);
+  if (!stdoutLines.length) return '';
+  return stdoutLines.join('\n').slice(-6000).trim();
 }
 
 function MissionReadinessRow({ label, value, tone }: { label: string; value: string; tone: 'ok' | 'warn' | 'muted' }) {

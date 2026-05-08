@@ -1446,7 +1446,8 @@ a {
   gap: 10px;
   flex-wrap: wrap;
 }
-.mission-review-transcript {
+.mission-review-transcript,
+.mission-review-deliverable pre {
   margin: 10px 0 0;
   max-height: 220px;
   overflow: auto;
@@ -1480,6 +1481,39 @@ a {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+.mission-review-lifecycle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.mission-review-lifecycle span {
+  display: inline-flex !important;
+  width: fit-content;
+  margin-top: 0 !important;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(15, 23, 42, 0.64);
+  color: var(--text-muted) !important;
+  font-size: 11px !important;
+  font-weight: 700;
+}
+.mission-review-deliverable {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(96, 165, 250, 0.07);
+}
+.mission-review-deliverable strong {
+  color: var(--text);
+}
+.mission-review-deliverable span {
+  margin-top: 0 !important;
 }
 .mission-result-box.nested {
   margin-top: 0;
