@@ -1458,6 +1458,7 @@ function ActivityView() {
   const [repoReviewHistory, setRepoReviewHistory] = useState<RepoReviewMissionHistoryEntry[]>(() => readRepoReviewMissionHistory());
 
   const loadRuntimeActionHistory = async () => {
+    setRepoReviewHistory(readRepoReviewMissionHistory());
     if (!window.conductor?.runtimeActions) return;
     setHistoryLoading(true);
     setHistoryError(null);
@@ -1469,6 +1470,7 @@ function ActivityView() {
       setHistoryError('Runtime action history could not be loaded. Details were redacted for display.');
     } finally {
       setHistoryLoading(false);
+      setRepoReviewHistory(readRepoReviewMissionHistory());
     }
   };
 
@@ -1616,16 +1618,16 @@ function ActivityView() {
       <div className="card local-tools-hero">
         <span className="eyebrow">Activity</span>
         <h2>{runtimeActionHistory.empty ? runtimeActionHistory.emptyTitle : 'Runtime action history'}</h2>
-        <p>{runtimeActionHistorySource.message}</p>
+        <p>{runtimeActionHistorySource.message} Repo review mission history is shown in its own section below.</p>
         <div className="actions">
           <button className="btn-ghost primary" onClick={loadRuntimeActionHistory} disabled={!window.conductor?.runtimeActions || historyLoading}>
             {runtimeActionHistorySource.status === 'desktop_required'
               ? 'Requires desktop bridge'
               : historyLoading
-                ? 'Loading audit history...'
-                : 'Refresh audit history'}
+                ? 'Loading activity history...'
+                : 'Refresh activity history'}
           </button>
-          <span className="hint">No fake live activity is rendered. {historyError ? 'Last read failed safely.' : ''}</span>
+          <span className="hint">No fake live activity is rendered. Refresh also reloads local repo review mission history. {historyError ? 'Last read failed safely.' : ''}</span>
         </div>
       </div>
 

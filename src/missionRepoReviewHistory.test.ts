@@ -24,5 +24,13 @@ describe('Repo review mission history', () => {
     expect(appSource).toContain('Repo review mission history');
     expect(appSource).toContain('No repo review missions have been recorded yet. Conductor will not show fake mission history.');
     expect(appSource).toContain('repoReviewHistory.map');
+    expect(appSource).toContain('Repo review mission history is shown in its own section below.');
+  });
+
+  it('refreshes local repo review mission history from Activity, not only runtime audit history', () => {
+    const loadBlock = appSource.slice(appSource.indexOf('const loadRuntimeActionHistory'), appSource.indexOf('const loadRuntimeActionApprovalQueue'));
+    expect(loadBlock).toContain('setRepoReviewHistory(readRepoReviewMissionHistory())');
+    expect(appSource).toContain('Refresh activity history');
+    expect(appSource).toContain('Refresh also reloads local repo review mission history.');
   });
 });
