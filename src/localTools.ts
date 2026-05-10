@@ -265,14 +265,34 @@ function actionModeLabel(action: LocalToolAction): string {
   return 'Safe action';
 }
 
-function runtimeSupportHint(recipe?: IntegrationRecipe, config?: InventoryConfigStatus, credentials?: InventoryConfigStatus): string | undefined {
+export function brokenGuidanceFor(diagnosticKind?: string): string {
+  if (diagnosticKind === 'package_manager_shim') {
+    return 'Detected, but its version check failed in a package manager shim. Repair Corepack or the package-manager install outside Conductor, then refresh inventory.';
+  }
+  if (diagnosticKind === 'permission') {
+    return 'Detected, but the version check was blocked by local permissions. Fix file or directory permissions outside Conductor, then refresh inventory.';
+  }
+  if (diagnosticKind === 'runtime_error') {
+    return 'Detected, but the version check crashed during desktop inventory. Reinstall or repair the local runtime, then refresh inventory.';
+  }
+  return 'Detected, but the version check failed. Inspect the sanitized error detail and rerun the desktop inventory scan after fixing the runtime.';
+}
+
+function runtimeSupportHint(
+  readiness: LocalToolReadiness,
+  tool: InventoryToolStatus,
+  recipe?: IntegrationRecipe,
+  config?: InventoryConfigStatus,
+  credentials?: InventoryConfigStatus,
+): string | undefined {
+  if (readiness === 'broken') return brokenGuidanceFor(tool.diagnosticKind);
   if (config && !config.exists) return 'Configuration file was not detected. Use Configure for safe setup guidance.';
   if (credentials?.exists && !hasAnyCredentialMarker(credentials)) return 'Credential markers were not detected. Configure credentials outside the renderer.';
   if (recipe?.docsUrl) return 'Documentation is available from the runtime recipe.';
   return undefined;
 }
 
-function readinessNextStep(readiness: LocalToolReadiness, runtimeId: CanonicalRuntimeId, action?: LocalToolAction): string {
+function readinessNextStep(readiness: LocalToolReadiness, runtimeId: CanonicalRuntimeId, action?: LocalToolAction, tool?: InventoryToolStatus): string {
   if (readiness === 'ready' || readiness === 'installed' || readiness === 'running') {
     return action
       ? `${actionModeLabel(action)}: ${action.description}`
@@ -281,7 +301,7 @@ function readinessNextStep(readiness: LocalToolReadiness, runtimeId: CanonicalRu
   if (readiness === 'not_scanned') return 'Refresh inventory from the desktop app before treating this runtime as installed or missing.';
   if (readiness === 'needs_config') return 'Open configuration guidance and complete setup outside the renderer.';
   if (readiness === 'needs_credentials') return 'Add required credentials in the runtime-owned config path, then refresh inventory.';
-  if (readiness === 'broken') return 'Inspect the sanitized error detail and rerun the desktop inventory scan after fixing the runtime.';
+  if (readiness === 'broken') return brokenGuidanceFor(tool?.diagnosticKind);
   if (readiness === 'unsupported') return 'Use this runtime only on a supported desktop platform.';
   if (readiness === 'stopped') return 'Start the local service outside Conductor or use an approved future service action.';
   return RUNTIME_DETAIL_COPY[runtimeId].missingStep;
@@ -355,7 +375,7 @@ function buildRuntimeDetailPanel(
     title: copy.title,
     summary: `${tool.label} is ${readinessLabel(readiness).toLowerCase()}. ${readinessDiagnosis(readiness)}`,
     rows,
-    nextSteps: [readinessNextStep(readiness, id, action)],
+    nextSteps: [readinessNextStep(readiness, id, action, tool)],
   };
 }
 
@@ -379,7 +399,7 @@ function toRuntimeItem(inventory: LocalInventory | null, id: CanonicalRuntimeId)
     version: tool.version,
     detail: runtimeDetail(tool, config),
     diagnosis: readinessDiagnosis(readiness),
-    supportHint: runtimeSupportHint(recipe, config, credentials),
+    supportHint: runtimeSupportHint(readiness, tool, recipe, config, credentials),
     recipeId: recipe?.id,
     recipe,
     healthChecks: recipe?.healthChecks ?? [],
@@ -411,7 +431,12 @@ function toToolItem(inventory: LocalInventory | null, id: string, categoryId: 'd
         ? tool.version ?? 'Detected'
         : tool.error ?? 'Not found in local PATH',
     diagnosis: readinessDiagnosis(readiness),
-    supportHint: readiness === 'not_scanned' ? 'Run desktop inventory refresh before treating this tool as installed or missing.' : undefined,
+    supportHint:
+      readiness === 'broken'
+        ? brokenGuidanceFor(tool.diagnosticKind)
+        : readiness === 'not_scanned'
+          ? 'Run desktop inventory refresh before treating this tool as installed or missing.'
+          : undefined,
     recipeId: tool.recipeId,
     recipe: knownRecipe(tool.recipeId),
     healthChecks: [],

@@ -52,7 +52,12 @@ function firstLine(value) {
 function diagnosticKindFor(command, output) {
   const value = `${command || ''}\n${output || ''}`.toLowerCase();
   if (value.includes('corepack') || value.includes('package manager')) return 'package_manager_shim';
-  if (value.includes('permission denied') || value.includes('eacces')) return 'permission';
+  if (
+    value.includes('permission denied') ||
+    value.includes('eacces') ||
+    value.includes('eperm') ||
+    value.includes('operation not permitted')
+  ) return 'permission';
   if (value.includes('syntaxerror') || value.includes('typeerror') || value.includes('stack trace')) return 'runtime_error';
   return 'version_check_failed';
 }
@@ -64,6 +69,9 @@ function sanitizeDiagnosticSummary(command, output) {
   }
   if (kind === 'permission') {
     return `${command} was found, but Conductor could not run its version check because of local permissions. Fix the local install, then refresh inventory.`;
+  }
+  if (kind === 'runtime_error') {
+    return `${command} was found, but its version check crashed during desktop inventory. Reinstall or repair the local runtime, then refresh inventory.`;
   }
   return `${command} was found, but its version check failed during desktop inventory. Fix the local install, then refresh inventory.`;
 }

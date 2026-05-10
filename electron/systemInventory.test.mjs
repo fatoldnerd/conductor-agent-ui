@@ -598,4 +598,131 @@ describe('collectLocalInventory', () => {
     expect(inventory.tools.pnpm.error).not.toContain('-L');
     expect(inventory.tools.pnpm.error).not.toContain('example.internal');
   });
+
+  it('classifies crashing CLI version checks as broken with a sanitized runtime_error summary', async () => {
+    const home = '/Users/private-user';
+    const codexCrash = Object.assign(new Error(
+      'Command failed: /opt/homebrew/bin/codex --version\n' +
+      'TypeError: Cannot read properties of undefined (reading \'parse\')\n' +
+      '    at parseArgs (/opt/homebrew/Cellar/codex/0.1/lib/codex/cli.js:40:12)\n' +
+      'TOKEN=secret ssh -N -L example.internal:8642:localhost:8642',
+    ), {
+      code: 1,
+      stdout: '',
+      stderr:
+        'TypeError: Cannot read properties of undefined (reading \'parse\')\n' +
+        '    at parseArgs (/opt/homebrew/Cellar/codex/0.1/lib/codex/cli.js:40:12)\n',
+    });
+    const commands = {
+      'git --version': ok('git version 2.45.0\n'),
+      '/opt/homebrew/bin/node --version': ok('v22.2.0\n'),
+      '/opt/homebrew/bin/npm --version': ok('10.9.4\n'),
+      '/opt/homebrew/bin/pnpm --version': ok('10.33.2\n'),
+      '/opt/homebrew/bin/python3 --version': ok('Python 3.12.2\n'),
+      '/opt/homebrew/bin/curl --version': ok('curl 8.7.1\n'),
+      '/opt/homebrew/bin/claude --version': ok('2.1.126 (Claude Code)\n'),
+      '/opt/homebrew/bin/codex --version': codexCrash,
+      '/opt/homebrew/bin/gemini --version': ok('0.1.12\n'),
+      'ss -ltnp': missing,
+      'lsof -nP -iTCP -sTCP:LISTEN': ok(''),
+      'ps -eo pid,comm,args': ok(''),
+    };
+
+    const inventory = await collectLocalInventory({
+      homedir: () => home,
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'macbook',
+      release: () => '24.6.0',
+      env: { PATH: '/usr/bin:/bin' },
+      async execFile(command, args = []) {
+        const key = [command, ...args].join(' ');
+        const result = commands[key];
+        if (result instanceof Error) throw result;
+        if (result) return result;
+        throw missing;
+      },
+      async access() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return '';
+      },
+    });
+
+    expect(inventory.tools.codex).toMatchObject({
+      available: false,
+      status: 'broken',
+      version: null,
+      diagnosticKind: 'runtime_error',
+    });
+    expect(inventory.tools.codex.error).toContain('crashed');
+    expect(inventory.tools.codex.error).not.toContain('TypeError');
+    expect(inventory.tools.codex.error).not.toContain('parseArgs');
+    expect(inventory.tools.codex.error).not.toContain('/opt/homebrew');
+    expect(inventory.tools.codex.error).not.toContain('/Users/');
+    expect(inventory.tools.codex.error).not.toContain('TOKEN=secret');
+    expect(inventory.tools.codex.error).not.toContain('example.internal');
+  });
+
+  it('classifies permission failures as broken with a sanitized permission summary', async () => {
+    const home = '/Users/private-user';
+    const claudePermissionError = Object.assign(new Error(
+      'Command failed: /opt/homebrew/bin/claude --version\n' +
+      'EPERM: operation not permitted, open \'/Users/private-user/.config/claude/settings.json\'\n' +
+      'TOKEN=secret',
+    ), {
+      code: 1,
+      stdout: '',
+      stderr:
+        'EPERM: operation not permitted, open \'/Users/private-user/.config/claude/settings.json\'\n',
+    });
+    const commands = {
+      'git --version': ok('git version 2.45.0\n'),
+      '/opt/homebrew/bin/node --version': ok('v22.2.0\n'),
+      '/opt/homebrew/bin/npm --version': ok('10.9.4\n'),
+      '/opt/homebrew/bin/pnpm --version': ok('10.33.2\n'),
+      '/opt/homebrew/bin/python3 --version': ok('Python 3.12.2\n'),
+      '/opt/homebrew/bin/curl --version': ok('curl 8.7.1\n'),
+      '/opt/homebrew/bin/claude --version': claudePermissionError,
+      '/opt/homebrew/bin/codex --version': ok('codex-cli 0.128.0\n'),
+      '/opt/homebrew/bin/gemini --version': ok('0.1.12\n'),
+      'ss -ltnp': missing,
+      'lsof -nP -iTCP -sTCP:LISTEN': ok(''),
+      'ps -eo pid,comm,args': ok(''),
+    };
+
+    const inventory = await collectLocalInventory({
+      homedir: () => home,
+      platform: 'darwin',
+      arch: 'arm64',
+      hostname: () => 'macbook',
+      release: () => '24.6.0',
+      env: { PATH: '/usr/bin:/bin' },
+      async execFile(command, args = []) {
+        const key = [command, ...args].join(' ');
+        const result = commands[key];
+        if (result instanceof Error) throw result;
+        if (result) return result;
+        throw missing;
+      },
+      async access() {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      },
+      async readFile() {
+        return '';
+      },
+    });
+
+    expect(inventory.tools.claude).toMatchObject({
+      available: false,
+      status: 'broken',
+      version: null,
+      diagnosticKind: 'permission',
+    });
+    expect(inventory.tools.claude.error).toContain('permissions');
+    expect(inventory.tools.claude.error).not.toContain('/Users/private-user');
+    expect(inventory.tools.claude.error).not.toContain('settings.json');
+    expect(inventory.tools.claude.error).not.toContain('TOKEN=secret');
+  });
 });

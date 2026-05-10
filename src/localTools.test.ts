@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLocalToolCategories, fallbackInventoryTool, isDetectedLocalToolItem, localToolSummary } from './localTools';
+import { brokenGuidanceFor, buildLocalToolCategories, fallbackInventoryTool, isDetectedLocalToolItem, localToolSummary } from './localTools';
 import type { LocalInventory } from './electron';
 
 function tool(id: string, overrides: Partial<LocalInventory['tools'][string]> = {}): LocalInventory['tools'][string] {
@@ -440,6 +440,63 @@ describe('local tool inventory view model', () => {
     });
     expect(pnpm?.detail).not.toContain('/Users/');
     expect(pnpm?.detail).not.toContain('at ');
+    expect(pnpm?.supportHint).toMatch(/Corepack|package-manager/);
+    expect(pnpm?.supportHint).not.toContain('/Users/');
+  });
+
+  it('surfaces kind-specific broken guidance for runtime_error and permission diagnostics', () => {
+    const categories = buildLocalToolCategories({
+      ...inventory,
+      tools: {
+        codex: tool('codex', {
+          label: 'Codex CLI',
+          command: 'codex',
+          category: 'agent-runtime',
+          recipeId: 'codex-cli',
+          available: false,
+          status: 'broken',
+          version: null,
+          diagnosticKind: 'runtime_error',
+          error: 'codex was found, but its version check crashed during desktop inventory. Reinstall or repair the local runtime, then refresh inventory.',
+        }),
+        claude: tool('claude', {
+          label: 'Claude Code',
+          command: 'claude',
+          category: 'agent-runtime',
+          recipeId: 'claude-code',
+          available: false,
+          status: 'broken',
+          version: null,
+          diagnosticKind: 'permission',
+          error: 'claude was found, but Conductor could not run its version check because of local permissions. Fix the local install, then refresh inventory.',
+        }),
+      },
+      configs: {},
+      services: {},
+    });
+
+    const runtimes = categories.find((category) => category.id === 'agent-runtimes')?.items ?? [];
+    const codex = runtimes.find((item) => item.id === 'codex-cli');
+    const claude = runtimes.find((item) => item.id === 'claude-code');
+
+    expect(codex?.readiness).toBe('broken');
+    expect(codex?.supportHint).toMatch(/crashed/);
+    expect(codex?.supportHint).not.toMatch(/Corepack|permissions/);
+    expect(codex?.detailPanel?.nextSteps[0]).toMatch(/crashed/);
+
+    expect(claude?.readiness).toBe('broken');
+    expect(claude?.supportHint).toMatch(/permissions/);
+    expect(claude?.supportHint).not.toMatch(/Corepack|crashed/);
+    expect(claude?.detailPanel?.nextSteps[0]).toMatch(/permissions/);
+    expect(claude?.supportHint).not.toContain('/Users/');
+  });
+
+  it('exposes a stable fallback for broken guidance when diagnosticKind is unknown', () => {
+    expect(brokenGuidanceFor(undefined)).toMatch(/sanitized/);
+    expect(brokenGuidanceFor('package_manager_shim')).toMatch(/Corepack/);
+    expect(brokenGuidanceFor('permission')).toMatch(/permissions/);
+    expect(brokenGuidanceFor('runtime_error')).toMatch(/crashed/);
+    expect(brokenGuidanceFor('something_else')).toMatch(/sanitized/);
   });
 
   it('represents SSH tunnel or port-in-use services without calling them running', () => {
