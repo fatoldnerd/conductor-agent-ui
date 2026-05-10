@@ -3,14 +3,14 @@
 Purpose: verify the packaged Conductor desktop app from GitHub Actions. This is not the hosted web app. The desktop app is the only build that can use the Electron bridge, inspect a local repo, request native approval, and start the fixed read-only repo review mission.
 
 Artifact under test:
-- GitHub Actions run: https://github.com/fatoldnerd/conductor-agent-ui/actions/runs/25548569392
-- Commit: 07c91c253a52cfacc0a070b059d8a8d8ee4b7746
+- GitHub Actions run: https://github.com/fatoldnerd/conductor-agent-ui/actions/runs/25630026108
+- Commit: f2f60f00c78dcbedfef9b080c62b8448e9369cb5
 - Artifact: conductor-macos-unsigned
 
 ## A. Download and open the app
 
 1. On your Mac, open this URL:
-   https://github.com/fatoldnerd/conductor-agent-ui/actions/runs/25548569392
+   https://github.com/fatoldnerd/conductor-agent-ui/actions/runs/25630026108
 
 2. Scroll to the Artifacts section near the bottom of the run page.
 
