@@ -43,7 +43,7 @@ import { buildRuntimeActionHistorySourceState } from './runtimeActionHistorySour
 import type { RuntimeActionApprovalDecisionReadResult } from './runtimeActionApprovalDecisionPersistence';
 import type { RuntimeActionAuditPersistenceReadResult } from './runtimeActionAuditPersistence';
 import type { RuntimeActionNativeConfirmationReadResult } from './electron';
-import { readinessLabel } from './runtimeReadiness';
+import { describeRuntimeActionAvailability, readinessLabel, type RuntimeActionAvailability } from './runtimeReadiness';
 import type {
   AgentRunEvent,
   AgentRunStatus,
@@ -792,6 +792,7 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
                 category={category}
                 selectedRecipeId={selectedRecipeId}
                 onAction={selectAction}
+                desktopAvailable={desktopAvailable}
               />
             ))}
           </div>
@@ -815,7 +816,7 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
                 <button className="btn-ghost primary" onClick={() => setView('integrations')}>Open installer workflow</button>
               </div>
             </div>
-            {selectedActionMetadata && <ActionPreflightDetails action={selectedActionMetadata} />}
+            {selectedActionMetadata && <ActionPreflightDetails action={selectedActionMetadata} desktopAvailable={desktopAvailable} />}
             {selectedAction === 'health_check' ? (
               <HealthPreview checks={selectedHealthChecks} />
             ) : selectedAction === 'configure' ? (
@@ -835,11 +836,12 @@ function ToolsView({ setView }: { setView: (v: View) => void }) {
   );
 }
 
-function ActionPreflightDetails({ action }: { action: LocalToolAction }) {
+function ActionPreflightDetails({ action, desktopAvailable }: { action: LocalToolAction; desktopAvailable: boolean }) {
+  const availability = describeRuntimeActionAvailability(action, { desktopAvailable });
   return (
     <div className="runtime-preflight-note">
       <p>
-        Suggested next step only. No command will run without explicit approval. Expected effect: {action.preflight.expectedEffect} Risk: {action.preflight.riskLevel}. Approval: {approvalModeLabel(action.approval.mode)}. Execution contract: {executionContractLabel(action.executionContract.status)}. Request envelope: {action.requestEnvelope?.submitState ?? 'not prepared'}. Approval workflow: {action.approvalWorkflow?.state ?? 'not prepared'}; {action.approvalWorkflow?.approvalPrompt ?? 'No approval workflow item has been prepared.'} {action.executionContract.reason} {action.approval.userFacingSummary}
+        <strong>{availability.label}.</strong> {availability.reason} Expected effect: {action.preflight.expectedEffect} Risk: {action.preflight.riskLevel}. Approval: {approvalModeLabel(action.approval.mode)}. Execution contract: {executionContractLabel(action.executionContract.status)}. Request envelope: {action.requestEnvelope?.submitState ?? 'not prepared'}. Approval workflow: {action.approvalWorkflow?.state ?? 'not prepared'}; {action.approvalWorkflow?.approvalPrompt ?? 'No approval workflow item has been prepared.'} {action.executionContract.reason} {action.approval.userFacingSummary}
       </p>
     </div>
   );
@@ -887,10 +889,12 @@ function LocalToolSection({
   category,
   selectedRecipeId,
   onAction,
+  desktopAvailable,
 }: {
   category: LocalToolCategory;
   selectedRecipeId: string | null;
   onAction: (item: LocalToolItem, action: LocalToolAction) => void;
+  desktopAvailable: boolean;
 }) {
   return (
     <div className="card local-tool-section">
@@ -899,50 +903,62 @@ function LocalToolSection({
         <span className="hint">{category.subtitle}</span>
       </div>
       <div className="local-tool-list">
-        {category.items.map((tool) => (
-          <div className="local-tool-row" key={tool.id}>
-            <span className={`status-dot ${statusDotClass(tool.readiness)}`} />
-            <div className="local-tool-main">
-              <strong>{tool.label}</strong>
-              <span>{tool.categoryLabel}{tool.version ? ` · ${tool.version}` : ''}</span>
-              <span>{tool.diagnosis}</span>
-              <span>{tool.detail}</span>
-              {tool.supportHint && <em>{tool.supportHint}</em>}
-              <em>{tool.description}</em>
+        {category.items.map((tool) => {
+          const primaryAvailability = tool.primaryAction
+            ? describeRuntimeActionAvailability(tool.primaryAction, { desktopAvailable })
+            : null;
+          return (
+            <div className="local-tool-row" key={tool.id}>
+              <span className={`status-dot ${statusDotClass(tool.readiness)}`} />
+              <div className="local-tool-main">
+                <strong>{tool.label}</strong>
+                <span>{tool.categoryLabel}{tool.version ? ` · ${tool.version}` : ''}</span>
+                <span>{tool.diagnosis}</span>
+                <span>{tool.detail}</span>
+                {tool.supportHint && <em>{tool.supportHint}</em>}
+                <em>{tool.description}</em>
+              </div>
+              <span className={`chip ${statusChipClass(tool.readiness)}`}>
+                {readinessLabel(tool.readiness)}
+              </span>
+              <div className="tool-row-actions">
+                {tool.primaryAction && primaryAvailability && (
+                  <span className="chip chip-muted" title={primaryAvailability.reason}>
+                    {primaryAvailability.label}: {tool.primaryAction.label}
+                  </span>
+                )}
+                {tool.actions.map((action) => {
+                  const availability = describeRuntimeActionAvailability(action, { desktopAvailable });
+                  const blocked = availability.mode === 'unavailable_in_browser';
+                  return (
+                    <button
+                      className={`btn-ghost ${selectedRecipeId === action.recipeId && action.kind === 'preview_install' ? 'primary' : ''}`}
+                      disabled={action.disabled || blocked}
+                      key={`${tool.id}-${action.kind}`}
+                      onClick={() => onAction(tool, action)}
+                      title={`${availability.label} — ${availability.reason}`}
+                    >
+                      {actionButtonLabel(action, availability)}
+                    </button>
+                  );
+                })}
+              </div>
+              {tool.detailPanel && <RuntimeDetailPanel tool={tool} desktopAvailable={desktopAvailable} />}
             </div>
-            <span className={`chip ${statusChipClass(tool.readiness)}`}>
-              {readinessLabel(tool.readiness)}
-            </span>
-            <div className="tool-row-actions">
-              {tool.primaryAction && (
-                <span className="chip chip-muted" title={tool.primaryAction.description}>
-                  {tool.primaryAction.previewOnly ? 'Suggested preview' : 'Primary'}: {tool.primaryAction.label}
-                </span>
-              )}
-              {tool.actions.map((action) => (
-                <button
-                  className={`btn-ghost ${selectedRecipeId === action.recipeId && action.kind === 'preview_install' ? 'primary' : ''}`}
-                  disabled={action.disabled}
-                  key={`${tool.id}-${action.kind}`}
-                  onClick={() => onAction(tool, action)}
-                  title={action.title ?? action.description}
-                >
-                  {actionButtonLabel(action)}
-                </button>
-              ))}
-            </div>
-            {tool.detailPanel && <RuntimeDetailPanel tool={tool} />}
-          </div>
-        ))}
+          );
+        })}
         {!category.items.length && <p className="empty-state">No local services detected yet. Refresh inventory from the desktop app.</p>}
       </div>
     </div>
   );
 }
 
-function RuntimeDetailPanel({ tool }: { tool: LocalToolItem }) {
+function RuntimeDetailPanel({ tool, desktopAvailable }: { tool: LocalToolItem; desktopAvailable: boolean }) {
   const panel = tool.detailPanel;
   if (!panel) return null;
+  const availability = tool.primaryAction
+    ? describeRuntimeActionAvailability(tool.primaryAction, { desktopAvailable })
+    : null;
 
   return (
     <div className="runtime-detail-panel">
@@ -951,9 +967,9 @@ function RuntimeDetailPanel({ tool }: { tool: LocalToolItem }) {
           <strong>{panel.title}</strong>
           <span>{panel.summary}</span>
         </div>
-        {tool.primaryAction && (
-          <span className="chip chip-muted" title={tool.primaryAction.description}>
-            {tool.primaryAction.previewOnly ? 'Preview' : 'Action'}: {tool.primaryAction.label}
+        {tool.primaryAction && availability && (
+          <span className="chip chip-muted" title={availability.reason}>
+            {availability.label}: {tool.primaryAction.label}
           </span>
         )}
       </div>
@@ -974,7 +990,8 @@ function RuntimeDetailPanel({ tool }: { tool: LocalToolItem }) {
   );
 }
 
-function actionButtonLabel(action: LocalToolAction) {
+function actionButtonLabel(action: LocalToolAction, availability: RuntimeActionAvailability) {
+  if (availability.mode === 'unavailable_in_browser') return `Unavailable: ${action.label}`;
   if (!action.previewOnly) return action.label;
   if (action.label.toLowerCase().startsWith('preview')) return action.label;
   return `Preview ${action.label.toLowerCase()}`;

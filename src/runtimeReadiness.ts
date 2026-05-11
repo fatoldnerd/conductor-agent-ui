@@ -262,3 +262,68 @@ export function readinessDiagnosis(readiness: RuntimeReadiness): string {
 export function safeAction(kind: RuntimeActionKind, overrides: Partial<RuntimeActionMetadata> = {}): RuntimeActionMetadata {
   return { ...SAFE_ACTION_METADATA[kind], ...overrides, kind, executesCommand: false };
 }
+
+export type RuntimeActionAvailabilityMode =
+  | 'preview_only'
+  | 'requires_desktop'
+  | 'browser_safe'
+  | 'unavailable_in_browser';
+
+export type RuntimeActionAvailability = {
+  mode: RuntimeActionAvailabilityMode;
+  label: string;
+  reason: string;
+  rendererCanExecute: false;
+  requiresApproval: boolean;
+  requirements: string[];
+};
+
+export function describeRuntimeActionAvailability(
+  action: RuntimeActionMetadata,
+  context: { desktopAvailable: boolean },
+): RuntimeActionAvailability {
+  const requiresApproval = action.preflight.requiresApproval;
+  const requirements = [...action.preflight.requirements];
+
+  if (action.requiresDesktop && !context.desktopAvailable) {
+    return {
+      mode: 'unavailable_in_browser',
+      label: 'Unavailable in browser',
+      reason: 'This action requires the Conductor desktop app. The renderer cannot execute it from a browser.',
+      rendererCanExecute: false,
+      requiresApproval,
+      requirements,
+    };
+  }
+
+  if (action.previewOnly) {
+    return {
+      mode: 'preview_only',
+      label: 'Preview only',
+      reason: 'Suggested next step only. The renderer shows preview and preflight details; nothing is run from this surface.',
+      rendererCanExecute: false,
+      requiresApproval,
+      requirements,
+    };
+  }
+
+  if (action.requiresDesktop) {
+    return {
+      mode: 'requires_desktop',
+      label: 'Desktop action',
+      reason: 'Routed through the Electron desktop bridge to a sanitized allowlisted handler. The renderer never runs shell commands.',
+      rendererCanExecute: false,
+      requiresApproval,
+      requirements,
+    };
+  }
+
+  return {
+    mode: 'browser_safe',
+    label: 'Browser-safe action',
+    reason: 'No local runtime state is changed. Opens documentation or shows guidance only.',
+    rendererCanExecute: false,
+    requiresApproval,
+    requirements,
+  };
+}

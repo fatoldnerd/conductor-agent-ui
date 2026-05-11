@@ -17,7 +17,7 @@ describe('production operational UI data sources', () => {
     expect(appSource).toContain('RuntimeDetailPanel');
     expect(appSource).toContain('tool.detailPanel');
     expect(appSource).toContain('action.previewOnly');
-    expect(appSource).toContain('Suggested preview');
+    expect(appSource).toContain('describeRuntimeActionAvailability');
     expect(appSource).toContain('ActionPreflightDetails');
     expect(appSource).toContain('action.preflight.expectedEffect');
     expect(appSource).toContain('action.approval.userFacingSummary');
@@ -58,7 +58,7 @@ describe('production operational UI data sources', () => {
     expect(appSource).toContain('runtimeActionNativeConfirmationHistorySource.status');
     expect(appSource).toContain('No action executed from native confirmation');
     expect(appSource).toContain('No command executes from these controls');
-    expect(appSource).toContain('No command will run without explicit approval');
+    expect(appSource).toContain('does not run renderer-provided commands');
     expect(appSource).toContain('readinessLabel(tool.readiness)');
   });
 });
