@@ -1,0 +1,273 @@
+name: Kanban desktop bridge and inventory smoke
+
+on:
+  push:
+    branches:
+      - kanban/t_183c2ec3-bridge-smoke
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  bridge-inventory-smoke:
+    name: Verify packaged desktop bridge and inventory surfaces
+    runs-on: macos-latest
+    steps:
+      - name: Checkout source for browser comparison
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build browser preview bundle
+        run: npm run build
+
+      - name: Capture macOS environment
+        run: |
+          set -euxo pipefail
+          sw_vers | tee macos-env.txt
+          uname -m | tee -a macos-env.txt
+          sysctl -n machdep.cpu.brand_string | tee -a macos-env.txt
+          node --version | tee -a macos-env.txt
+
+      - name: Download parent desktop artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          gh run download 25458687751 \
+            --repo fatoldnerd/conductor-agent-ui \
+            --name conductor-macos-unsigned \
+            --dir artifact
+          find artifact -maxdepth 4 -print | sort | tee artifact-tree.txt
+
+      - name: Verify packaged desktop bridge and inventory via CDP
+        run: |
+          set -euxo pipefail
+          APP="artifact/mac-arm64/Conductor.app"
+          test -d "$APP"
+          xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+          "$APP/Contents/MacOS/Conductor" --no-sandbox --remote-debugging-port=9222 > conductor-desktop.log 2>&1 &
+          echo $! > conductor.pid
+          node <<'NODE'
+          const fs = require('node:fs/promises');
+
+          async function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+          async function getJson(url) {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`${url} -> ${response.status}`);
+            return response.json();
+          }
+          async function connectCdp(port) {
+            let pages;
+            for (let i = 0; i < 60; i += 1) {
+              try {
+                pages = await getJson(`http://127.0.0.1:${port}/json`);
+                if (Array.isArray(pages) && pages[0]?.webSocketDebuggerUrl) break;
+              } catch {}
+              await sleep(1000);
+            }
+            if (!pages?.[0]?.webSocketDebuggerUrl) throw new Error(`No CDP page on port ${port}`);
+            const ws = new WebSocket(pages[0].webSocketDebuggerUrl);
+            await new Promise((resolve, reject) => {
+              ws.addEventListener('open', resolve, { once: true });
+              ws.addEventListener('error', reject, { once: true });
+            });
+            let id = 0;
+            const pending = new Map();
+            ws.addEventListener('message', (event) => {
+              const message = JSON.parse(event.data);
+              if (message.id && pending.has(message.id)) {
+                const { resolve, reject } = pending.get(message.id);
+                pending.delete(message.id);
+                if (message.error) reject(new Error(JSON.stringify(message.error)));
+                else resolve(message.result);
+              }
+            });
+            const send = (method, params = {}) => new Promise((resolve, reject) => {
+              const msgId = ++id;
+              pending.set(msgId, { resolve, reject });
+              ws.send(JSON.stringify({ id: msgId, method, params }));
+            });
+            return { ws, send };
+          }
+          function asReturnValue(result) {
+            if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
+            return result.result.value;
+          }
+          function summarizeInventory(inventory) {
+            const tools = inventory.tools || [];
+            const services = inventory.services || [];
+            const configs = inventory.configs || [];
+            const secrets = inventory.secrets || [];
+            return {
+              platform: inventory.system?.platform,
+              arch: inventory.system?.arch,
+              toolCount: tools.length,
+              readyTools: tools.filter((tool) => tool.status === 'ready').map((tool) => ({ id: tool.id, label: tool.label, version: tool.version || null })),
+              missingTools: tools.filter((tool) => tool.status === 'missing').map((tool) => tool.id),
+              brokenTools: tools.filter((tool) => tool.status === 'broken').map((tool) => ({ id: tool.id, diagnosticKind: tool.diagnosticKind || null, error: tool.error || null })),
+              serviceCount: services.length,
+              runningServices: services.filter((service) => service.status === 'running').map((service) => ({ id: service.id, label: service.label })),
+              configMarkers: configs.map((config) => ({ id: config.id, present: Boolean(config.present) })),
+              secretMarkers: secrets.map((secret) => ({ id: secret.id, present: Boolean(secret.present) })),
+            };
+          }
+
+          const cdp = await connectCdp(9222);
+          await cdp.send('Page.enable');
+          await cdp.send('Runtime.enable');
+          await sleep(4000);
+          const expression = `
+            (async () => {
+              const bridge = window.conductor;
+              const result = {
+                url: location.href,
+                hasBridge: Boolean(bridge),
+                conductorKeys: bridge ? Object.keys(bridge).sort() : [],
+                bodyText: document.body.innerText.slice(0, 12000),
+              };
+              if (bridge) {
+                result.systemInfo = await bridge.system.getInfo();
+                result.inventory = await bridge.system.collectInventory();
+                result.prerequisiteKeys = Object.keys(await bridge.system.checkPrerequisites()).sort();
+                result.runtimeCount = (await bridge.agents.listRuntimes()).length;
+                result.auditHistory = await bridge.runtimeActions.getAuditHistory();
+                result.approvalQueue = await bridge.runtimeActions.getApprovalQueue();
+              }
+              return result;
+            })()
+          `;
+          const desktop = asReturnValue(await cdp.send('Runtime.evaluate', {
+            expression,
+            awaitPromise: true,
+            returnByValue: true,
+            timeout: 30000,
+          }));
+          desktop.inventorySummary = desktop.inventory ? summarizeInventory(desktop.inventory) : null;
+          delete desktop.inventory;
+          const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+          await fs.writeFile('desktop-dashboard.png', screenshot.data, 'base64');
+          await fs.writeFile('desktop-bridge-result.json', JSON.stringify(desktop, null, 2));
+          if (!desktop.hasBridge) throw new Error('Packaged desktop renderer did not expose window.conductor');
+          if (!desktop.systemInfo || desktop.systemInfo.platform !== 'darwin') throw new Error('Desktop bridge system:getInfo did not return darwin system info');
+          if (!desktop.inventorySummary || desktop.inventorySummary.toolCount < 5) throw new Error('Desktop inventory did not return expected tool list');
+          if (!/Live local inventory|Partial local inventory|Configuration needed|Credentials needed|No local tools detected/.test(desktop.bodyText)) {
+            throw new Error('Desktop UI did not show a completed inventory state');
+          }
+          cdp.ws.close();
+          NODE
+
+      - name: Verify browser preview has no desktop bridge
+        run: |
+          set -euxo pipefail
+          npx vite preview --host 127.0.0.1 --port 4173 --strictPort > vite-preview.log 2>&1 &
+          echo $! > vite-preview.pid
+          CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+          if [ ! -x "$CHROME" ]; then
+            CHROME="/Applications/Chromium.app/Contents/MacOS/Chromium"
+          fi
+          test -x "$CHROME"
+          "$CHROME" --headless=new --disable-gpu --no-sandbox --remote-debugging-port=9333 http://127.0.0.1:4173 > chrome-browser.log 2>&1 &
+          echo $! > chrome-browser.pid
+          node <<'NODE'
+          const fs = require('node:fs/promises');
+          async function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+          async function getJson(url) {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`${url} -> ${response.status}`);
+            return response.json();
+          }
+          async function connectCdp(port) {
+            let pages;
+            for (let i = 0; i < 60; i += 1) {
+              try {
+                pages = await getJson(`http://127.0.0.1:${port}/json`);
+                if (Array.isArray(pages) && pages[0]?.webSocketDebuggerUrl) break;
+              } catch {}
+              await sleep(1000);
+            }
+            if (!pages?.[0]?.webSocketDebuggerUrl) throw new Error(`No CDP page on port ${port}`);
+            const ws = new WebSocket(pages[0].webSocketDebuggerUrl);
+            await new Promise((resolve, reject) => {
+              ws.addEventListener('open', resolve, { once: true });
+              ws.addEventListener('error', reject, { once: true });
+            });
+            let id = 0;
+            const pending = new Map();
+            ws.addEventListener('message', (event) => {
+              const message = JSON.parse(event.data);
+              if (message.id && pending.has(message.id)) {
+                const { resolve, reject } = pending.get(message.id);
+                pending.delete(message.id);
+                if (message.error) reject(new Error(JSON.stringify(message.error)));
+                else resolve(message.result);
+              }
+            });
+            const send = (method, params = {}) => new Promise((resolve, reject) => {
+              const msgId = ++id;
+              pending.set(msgId, { resolve, reject });
+              ws.send(JSON.stringify({ id: msgId, method, params }));
+            });
+            return { ws, send };
+          }
+          function asReturnValue(result) {
+            if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
+            return result.result.value;
+          }
+          const cdp = await connectCdp(9333);
+          await cdp.send('Page.enable');
+          await cdp.send('Runtime.enable');
+          await sleep(3000);
+          const browser = asReturnValue(await cdp.send('Runtime.evaluate', {
+            expression: `({ url: location.href, hasBridge: Boolean(window.conductor), bodyText: document.body.innerText.slice(0, 12000) })`,
+            returnByValue: true,
+          }));
+          const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+          await fs.writeFile('browser-dashboard.png', screenshot.data, 'base64');
+          await fs.writeFile('browser-preview-result.json', JSON.stringify(browser, null, 2));
+          if (browser.hasBridge) throw new Error('Browser preview unexpectedly exposed window.conductor');
+          if (!browser.bodyText.includes('Desktop bridge required')) throw new Error('Browser preview did not show desktop bridge required state');
+          if (!browser.bodyText.includes('Requires desktop bridge')) throw new Error('Browser preview did not disable local scan behind desktop bridge copy');
+          cdp.ws.close();
+          NODE
+
+      - name: Collect logs
+        if: always()
+        run: |
+          set +e
+          cat conductor.pid 2>/dev/null | xargs -r kill 2>/dev/null
+          cat vite-preview.pid 2>/dev/null | xargs -r kill 2>/dev/null
+          cat chrome-browser.pid 2>/dev/null | xargs -r kill 2>/dev/null
+          if [ -f desktop-bridge-result.json ]; then jq '{hasBridge, conductorKeys, systemInfo, inventorySummary, prerequisiteKeys, runtimeCount}' desktop-bridge-result.json | tee desktop-summary.json; fi
+          if [ -f browser-preview-result.json ]; then jq '{hasBridge, url, bodyText: .bodyText[0:1000]}' browser-preview-result.json | tee browser-summary.json; fi
+
+      - name: Upload bridge smoke report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kanban-bridge-inventory-smoke-report
+          path: |
+            macos-env.txt
+            artifact-tree.txt
+            desktop-bridge-result.json
+            desktop-summary.json
+            desktop-dashboard.png
+            browser-preview-result.json
+            browser-summary.json
+            browser-dashboard.png
+            conductor-desktop.log
+            vite-preview.log
+            chrome-browser.log
+            conductor.pid
+            vite-preview.pid
+            chrome-browser.pid
+          if-no-files-found: ignore
