@@ -1,6 +1,11 @@
 name: Kanban UI leakage audit
 
 on:
+  push:
+    branches:
+      - kanban/t_f678d2bf-macos-smoke
+    paths:
+      - .github/workflows/kanban-ui-audit.yml
   workflow_dispatch:
 
 permissions:
