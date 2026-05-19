@@ -122,48 +122,53 @@ jobs:
             };
           }
 
-          const cdp = await connectCdp(9222);
-          await cdp.send('Page.enable');
-          await cdp.send('Runtime.enable');
-          await sleep(4000);
-          const expression = `
-            (async () => {
-              const bridge = window.conductor;
-              const result = {
-                url: location.href,
-                hasBridge: Boolean(bridge),
-                conductorKeys: bridge ? Object.keys(bridge).sort() : [],
-                bodyText: document.body.innerText.slice(0, 12000),
-              };
-              if (bridge) {
-                result.systemInfo = await bridge.system.getInfo();
-                result.inventory = await bridge.system.collectInventory();
-                result.prerequisiteKeys = Object.keys(await bridge.system.checkPrerequisites()).sort();
-                result.runtimeCount = (await bridge.agents.listRuntimes()).length;
-                result.auditHistory = await bridge.runtimeActions.getAuditHistory();
-                result.approvalQueue = await bridge.runtimeActions.getApprovalQueue();
-              }
-              return result;
-            })()
-          `;
-          const desktop = asReturnValue(await cdp.send('Runtime.evaluate', {
-            expression,
-            awaitPromise: true,
-            returnByValue: true,
-            timeout: 30000,
-          }));
-          desktop.inventorySummary = desktop.inventory ? summarizeInventory(desktop.inventory) : null;
-          delete desktop.inventory;
-          const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
-          await fs.writeFile('desktop-dashboard.png', screenshot.data, 'base64');
-          await fs.writeFile('desktop-bridge-result.json', JSON.stringify(desktop, null, 2));
-          if (!desktop.hasBridge) throw new Error('Packaged desktop renderer did not expose window.conductor');
-          if (!desktop.systemInfo || desktop.systemInfo.platform !== 'darwin') throw new Error('Desktop bridge system:getInfo did not return darwin system info');
-          if (!desktop.inventorySummary || desktop.inventorySummary.toolCount < 5) throw new Error('Desktop inventory did not return expected tool list');
-          if (!/Live local inventory|Partial local inventory|Configuration needed|Credentials needed|No local tools detected/.test(desktop.bodyText)) {
-            throw new Error('Desktop UI did not show a completed inventory state');
-          }
-          cdp.ws.close();
+          (async () => {
+            const cdp = await connectCdp(9222);
+            await cdp.send('Page.enable');
+            await cdp.send('Runtime.enable');
+            await sleep(4000);
+            const expression = `
+              (async () => {
+                const bridge = window.conductor;
+                const result = {
+                  url: location.href,
+                  hasBridge: Boolean(bridge),
+                  conductorKeys: bridge ? Object.keys(bridge).sort() : [],
+                  bodyText: document.body.innerText.slice(0, 12000),
+                };
+                if (bridge) {
+                  result.systemInfo = await bridge.system.getInfo();
+                  result.inventory = await bridge.system.collectInventory();
+                  result.prerequisiteKeys = Object.keys(await bridge.system.checkPrerequisites()).sort();
+                  result.runtimeCount = (await bridge.agents.listRuntimes()).length;
+                  result.auditHistory = await bridge.runtimeActions.getAuditHistory();
+                  result.approvalQueue = await bridge.runtimeActions.getApprovalQueue();
+                }
+                return result;
+              })()
+            `;
+            const desktop = asReturnValue(await cdp.send('Runtime.evaluate', {
+              expression,
+              awaitPromise: true,
+              returnByValue: true,
+              timeout: 30000,
+            }));
+            desktop.inventorySummary = desktop.inventory ? summarizeInventory(desktop.inventory) : null;
+            delete desktop.inventory;
+            const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+            await fs.writeFile('desktop-dashboard.png', screenshot.data, 'base64');
+            await fs.writeFile('desktop-bridge-result.json', JSON.stringify(desktop, null, 2));
+            if (!desktop.hasBridge) throw new Error('Packaged desktop renderer did not expose window.conductor');
+            if (!desktop.systemInfo || desktop.systemInfo.platform !== 'darwin') throw new Error('Desktop bridge system:getInfo did not return darwin system info');
+            if (!desktop.inventorySummary || desktop.inventorySummary.toolCount < 5) throw new Error('Desktop inventory did not return expected tool list');
+            if (!/Live local inventory|Partial local inventory|Configuration needed|Credentials needed|No local tools detected/.test(desktop.bodyText)) {
+              throw new Error('Desktop UI did not show a completed inventory state');
+            }
+            cdp.ws.close();
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
           NODE
 
       - name: Verify browser preview has no desktop bridge
@@ -223,21 +228,26 @@ jobs:
             if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
             return result.result.value;
           }
-          const cdp = await connectCdp(9333);
-          await cdp.send('Page.enable');
-          await cdp.send('Runtime.enable');
-          await sleep(3000);
-          const browser = asReturnValue(await cdp.send('Runtime.evaluate', {
-            expression: `({ url: location.href, hasBridge: Boolean(window.conductor), bodyText: document.body.innerText.slice(0, 12000) })`,
-            returnByValue: true,
-          }));
-          const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
-          await fs.writeFile('browser-dashboard.png', screenshot.data, 'base64');
-          await fs.writeFile('browser-preview-result.json', JSON.stringify(browser, null, 2));
-          if (browser.hasBridge) throw new Error('Browser preview unexpectedly exposed window.conductor');
-          if (!browser.bodyText.includes('Desktop bridge required')) throw new Error('Browser preview did not show desktop bridge required state');
-          if (!browser.bodyText.includes('Requires desktop bridge')) throw new Error('Browser preview did not disable local scan behind desktop bridge copy');
-          cdp.ws.close();
+          (async () => {
+            const cdp = await connectCdp(9333);
+            await cdp.send('Page.enable');
+            await cdp.send('Runtime.enable');
+            await sleep(3000);
+            const browser = asReturnValue(await cdp.send('Runtime.evaluate', {
+              expression: `({ url: location.href, hasBridge: Boolean(window.conductor), bodyText: document.body.innerText.slice(0, 12000) })`,
+              returnByValue: true,
+            }));
+            const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+            await fs.writeFile('browser-dashboard.png', screenshot.data, 'base64');
+            await fs.writeFile('browser-preview-result.json', JSON.stringify(browser, null, 2));
+            if (browser.hasBridge) throw new Error('Browser preview unexpectedly exposed window.conductor');
+            if (!browser.bodyText.includes('Desktop bridge required')) throw new Error('Browser preview did not show desktop bridge required state');
+            if (!browser.bodyText.includes('Requires desktop bridge')) throw new Error('Browser preview did not disable local scan behind desktop bridge copy');
+            cdp.ws.close();
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
           NODE
 
       - name: Collect logs
