@@ -88,8 +88,17 @@ const seededItems = [
 ];
 fs.writeFileSync(queuePath, seededItems.map((item) => JSON.stringify(item)).join('\n') + '\n', 'utf8');
 
+function chmodExecutableFiles(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) chmodExecutableFiles(full);
+    else if (entry.isFile()) {
+      try { fs.chmodSync(full, 0o755); } catch {}
+    }
+  }
+}
 try { sh('xattr', ['-dr', 'com.apple.quarantine', appPath]); } catch {}
-try { fs.chmodSync(exePath, 0o755); } catch {}
+chmodExecutableFiles(appPath);
 
 const port = 9223;
 const app = spawn(exePath, [`--remote-debugging-port=${port}`], {
@@ -98,8 +107,11 @@ const app = spawn(exePath, [`--remote-debugging-port=${port}`], {
 });
 let stdout = '';
 let stderr = '';
+let appExit = null;
 app.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
 app.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+app.on('error', (error) => { appExit = { error: String(error.message || error) }; });
+app.on('exit', (code, signal) => { appExit = { code, signal }; });
 process.on('exit', () => { try { app.kill('SIGTERM'); } catch {} });
 
 async function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
@@ -118,7 +130,7 @@ async function waitForTarget() {
     } catch {}
     await sleep(500);
   }
-  throw new Error(`Timed out waiting for CDP target. stdout=${stdout} stderr=${stderr}`);
+  throw new Error(`Timed out waiting for CDP target. appExit=${JSON.stringify(appExit)} stdout=${stdout} stderr=${stderr}`);
 }
 
 class Cdp {
