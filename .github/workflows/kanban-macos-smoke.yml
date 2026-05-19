@@ -1,0 +1,86 @@
+name: Kanban macOS artifact smoke
+
+on:
+  push:
+    branches:
+      - kanban/t_f678d2bf-macos-smoke
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  smoke:
+    name: Install and launch run 25458687751 artifact
+    runs-on: macos-latest
+    steps:
+      - name: Capture macOS environment
+        run: |
+          set -euxo pipefail
+          sw_vers | tee macos-env.txt
+          uname -m | tee -a macos-env.txt
+          sysctl -n machdep.cpu.brand_string | tee -a macos-env.txt
+
+      - name: Download artifact from target run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          gh run download 25458687751 \
+            --repo fatoldnerd/conductor-agent-ui \
+            --name conductor-macos-unsigned \
+            --dir artifact
+          find artifact -maxdepth 3 -print | sort | tee artifact-tree.txt
+
+      - name: Inspect build metadata
+        run: |
+          set -euxo pipefail
+          APP="artifact/mac-arm64/Conductor.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$APP/Contents/Info.plist" | tee build-info.txt
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist" | tee -a build-info.txt
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" | tee -a build-info.txt
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist" | tee -a build-info.txt
+          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist" | tee -a build-info.txt
+          file "$APP/Contents/MacOS/Conductor" | tee -a build-info.txt
+          codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | tee codesign-verify.txt || true
+          spctl --assess --type execute --verbose=4 "$APP" 2>&1 | tee spctl-assess.txt || true
+
+      - name: Launch app executable
+        run: |
+          set -euxo pipefail
+          APP="artifact/mac-arm64/Conductor.app"
+          xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+          "$APP/Contents/MacOS/Conductor" --no-sandbox > conductor-launch.log 2>&1 &
+          PID=$!
+          echo "$PID" > conductor.pid
+          sleep 15
+          if ps -p "$PID" > /dev/null; then
+            echo "LAUNCH_RESULT=success_process_alive_after_15s" | tee launch-result.txt
+            ps -p "$PID" -o pid,ppid,stat,command | tee -a launch-result.txt
+            kill "$PID" || true
+          else
+            STATUS=$?
+            echo "LAUNCH_RESULT=failed_process_exited_before_15s status=$STATUS" | tee launch-result.txt
+            cat conductor-launch.log
+            exit 1
+          fi
+          sleep 2
+          cat conductor-launch.log || true
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kanban-macos-smoke-report
+          path: |
+            macos-env.txt
+            artifact-tree.txt
+            build-info.txt
+            codesign-verify.txt
+            spctl-assess.txt
+            launch-result.txt
+            conductor-launch.log
+            conductor.pid
+          if-no-files-found: ignore
