@@ -89,6 +89,7 @@ const seededItems = [
 fs.writeFileSync(queuePath, seededItems.map((item) => JSON.stringify(item)).join('\n') + '\n', 'utf8');
 
 try { sh('xattr', ['-dr', 'com.apple.quarantine', appPath]); } catch {}
+try { fs.chmodSync(exePath, 0o755); } catch {}
 
 const port = 9223;
 const app = spawn(exePath, [`--remote-debugging-port=${port}`], {
