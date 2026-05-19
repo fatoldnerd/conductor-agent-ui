@@ -65,28 +65,41 @@ jobs:
           await Runtime.enable();
           await sleep(5000);
 
-          const probes = {
-            title: 'document.title',
-            location: 'location.href',
-            bodyText: 'document.body ? document.body.innerText : ""',
-            bodyHtmlPreview: 'document.body ? document.body.outerHTML.slice(0, 20000) : ""',
-            controls: `Array.from(document.querySelectorAll('button,a,input,textarea,select,[role="button"],[role="link"]')).map((el) => ({ tag: el.tagName, text: (el.innerText || el.value || el.getAttribute('aria-label') || '').trim(), disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true', role: el.getAttribute('role'), href: el.getAttribute('href'), type: el.getAttribute('type'), title: el.getAttribute('title') }))`,
-            bridgeKeys: 'window.conductor ? Object.keys(window.conductor) : null',
-            localStorage: 'Object.fromEntries(Object.entries(localStorage || {}))',
-            sessionStorage: 'Object.fromEntries(Object.entries(sessionStorage || {}))',
-            userAgent: 'navigator.userAgent',
-          };
-
-          const results = {};
-          for (const [name, expression] of Object.entries(probes)) {
+          async function evaluateJson(expression) {
             const response = await Runtime.evaluate(expr(expression));
-            results[name] = response.result.value ?? response.result.description ?? null;
+            return response.result.value ?? response.result.description ?? null;
           }
-          write('dom-audit.json', results);
-          write('dom-text.txt', results.bodyText || '');
 
-          const screenshot = await Page.captureScreenshot({ format: 'png', captureBeyondViewport: true });
-          fs.writeFileSync('ui-screenshot.png', Buffer.from(screenshot.data, 'base64'));
+          async function capturePage(label) {
+            const safeLabel = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            const result = {
+              label,
+              title: await evaluateJson('document.title'),
+              location: await evaluateJson('location.href'),
+              bodyText: await evaluateJson('document.body ? document.body.innerText : ""'),
+              bodyHtmlPreview: await evaluateJson('document.body ? document.body.outerHTML.slice(0, 20000) : ""'),
+              controls: await evaluateJson(`Array.from(document.querySelectorAll('button,a,input,textarea,select,[role="button"],[role="link"]')).map((el) => ({ tag: el.tagName, text: (el.innerText || el.value || el.getAttribute('aria-label') || '').trim(), disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true', role: el.getAttribute('role'), href: el.getAttribute('href'), type: el.getAttribute('type'), title: el.getAttribute('title') }))`),
+              bridgeKeys: await evaluateJson('window.conductor ? Object.keys(window.conductor) : null'),
+              localStorage: await evaluateJson('Object.fromEntries(Object.entries(localStorage || {}))'),
+              sessionStorage: await evaluateJson('Object.fromEntries(Object.entries(sessionStorage || {}))'),
+              userAgent: await evaluateJson('navigator.userAgent'),
+            };
+            write(`dom-audit-${safeLabel}.json`, result);
+            write(`dom-text-${safeLabel}.txt`, result.bodyText || '');
+            const screenshot = await Page.captureScreenshot({ format: 'png', captureBeyondViewport: true });
+            fs.writeFileSync(`ui-screenshot-${safeLabel}.png`, Buffer.from(screenshot.data, 'base64'));
+            return result;
+          }
+
+          const labels = ['Dashboard', 'Agents', 'Teams', 'Workflows', 'Agent Runtimes', 'Agent Console', 'Installers', 'Activity', 'Diagnostics', 'Runs', 'Settings'];
+          const results = [];
+          for (const label of labels) {
+            await Runtime.evaluate(expr(`(() => { const nodes = Array.from(document.querySelectorAll('button,a,[role="button"],[role="link"]')); const target = nodes.find((el) => ((el.innerText || el.getAttribute('aria-label') || '').trim().split('\\n')[0] === ${JSON.stringify(label)})); if (target) { target.click(); return true; } return false; })()`));
+            await sleep(1200);
+            results.push(await capturePage(label));
+          }
+          write('dom-audit.json', { pages: results });
+          write('dom-text.txt', results.map((page) => `===== ${page.label} =====\n${page.bodyText || ''}`).join('\n\n'));
 
           write('processes-after.txt', sh("ps ax -o pid,ppid,command | egrep 'Conductor|node|claude|codex|hermes|openclaw|ollama|python' | egrep -v 'egrep|audit-ui'"));
           await client.close();
@@ -152,9 +165,9 @@ jobs:
             artifact-tree.txt
             cdp-version.json
             cdp-pages.json
-            dom-audit.json
-            dom-text.txt
-            ui-screenshot.png
+            dom-audit*.json
+            dom-text*.txt
+            ui-screenshot*.png
             processes-before.txt
             processes-after.txt
             launch-result.txt
