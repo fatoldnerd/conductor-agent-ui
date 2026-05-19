@@ -1,0 +1,159 @@
+name: Kanban UI leakage audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  audit:
+    name: Audit run 25458687751 desktop UI for leakage and fake state
+    runs-on: macos-latest
+    steps:
+      - name: Capture macOS environment
+        run: |
+          set -euxo pipefail
+          sw_vers | tee macos-env.txt
+          uname -m | tee -a macos-env.txt
+          hostname | tee hostname.txt
+
+      - name: Download artifact from target run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          gh run download 25458687751 \
+            --repo fatoldnerd/conductor-agent-ui \
+            --name conductor-macos-unsigned \
+            --dir artifact
+          find artifact -maxdepth 3 -print | sort | tee artifact-tree.txt
+
+      - name: Install CDP helper
+        run: |
+          set -euxo pipefail
+          npm install chrome-remote-interface@0.33.3
+
+      - name: Write audit script
+        run: |
+          cat > audit-ui.mjs <<'JS'
+          import CDP from 'chrome-remote-interface';
+          import fs from 'node:fs';
+          import { execSync } from 'node:child_process';
+
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          const write = (name, value) => fs.writeFileSync(name, typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+          const expr = (expression) => ({ expression, returnByValue: true, awaitPromise: true });
+
+          function sh(command) {
+            try { return execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
+            catch (error) { return `${error.stdout || ''}${error.stderr || ''}`; }
+          }
+
+          write('processes-before.txt', sh("ps ax -o pid,ppid,command | egrep 'Conductor|node|claude|codex|hermes|openclaw|ollama|python' | egrep -v 'egrep|audit-ui'"));
+          await sleep(5000);
+
+          const client = await CDP({ port: 9222 });
+          const { Page, Runtime } = client;
+          await Page.enable();
+          await Runtime.enable();
+          await sleep(5000);
+
+          const probes = {
+            title: 'document.title',
+            location: 'location.href',
+            bodyText: 'document.body ? document.body.innerText : ""',
+            bodyHtmlPreview: 'document.body ? document.body.outerHTML.slice(0, 20000) : ""',
+            controls: `Array.from(document.querySelectorAll('button,a,input,textarea,select,[role="button"],[role="link"]')).map((el) => ({ tag: el.tagName, text: (el.innerText || el.value || el.getAttribute('aria-label') || '').trim(), disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true', role: el.getAttribute('role'), href: el.getAttribute('href'), type: el.getAttribute('type'), title: el.getAttribute('title') }))`,
+            bridgeKeys: 'window.conductor ? Object.keys(window.conductor) : null',
+            localStorage: 'Object.fromEntries(Object.entries(localStorage || {}))',
+            sessionStorage: 'Object.fromEntries(Object.entries(sessionStorage || {}))',
+            userAgent: 'navigator.userAgent',
+          };
+
+          const results = {};
+          for (const [name, expression] of Object.entries(probes)) {
+            const response = await Runtime.evaluate(expr(expression));
+            results[name] = response.result.value ?? response.result.description ?? null;
+          }
+          write('dom-audit.json', results);
+          write('dom-text.txt', results.bodyText || '');
+
+          const screenshot = await Page.captureScreenshot({ format: 'png', captureBeyondViewport: true });
+          fs.writeFileSync('ui-screenshot.png', Buffer.from(screenshot.data, 'base64'));
+
+          write('processes-after.txt', sh("ps ax -o pid,ppid,command | egrep 'Conductor|node|claude|codex|hermes|openclaw|ollama|python' | egrep -v 'egrep|audit-ui'"));
+          await client.close();
+          JS
+
+      - name: Launch and audit app through DevTools Protocol
+        run: |
+          set -euxo pipefail
+          APP="artifact/mac-arm64/Conductor.app"
+          xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+          "$APP/Contents/MacOS/Conductor" --no-sandbox --remote-debugging-port=9222 --user-data-dir="$PWD/conductor-user-data" > conductor-launch.log 2>&1 &
+          PID=$!
+          echo "$PID" > conductor.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:9222/json/version > cdp-version.json; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:9222/json/list | tee cdp-pages.json
+          node audit-ui.mjs
+          ps -p "$PID" -o pid,ppid,stat,command | tee launch-result.txt
+          kill "$PID" || true
+          sleep 2
+          cat conductor-launch.log || true
+
+      - name: Bundle audit report
+        if: always()
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          import json, os, re
+          patterns = {
+            'path_or_home': re.compile(r'(/Users/[^\s<>"\']+|/root/[^\s<>"\']+|/home/[^\s<>"\']+)'),
+            'token_like': re.compile(r'(github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{20,}|[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z0-9_]*\s*[=:]\s*[^\s,;]+)', re.I),
+            'personal_name': re.compile(r'\b(Hugo|Kestrel|Brad)\b', re.I),
+            'fake_state_terms': re.compile(r'\b(fake|mock|sample|demo data|connected|running|executed|completed)\b', re.I),
+          }
+          files = ['dom-text.txt', 'dom-audit.json', 'conductor-launch.log', 'processes-before.txt', 'processes-after.txt']
+          findings = []
+          for path in files:
+            if not os.path.exists(path):
+              continue
+            text = open(path, errors='ignore').read()
+            for label, pattern in patterns.items():
+              for match in pattern.finditer(text):
+                start = max(0, match.start() - 80)
+                end = min(len(text), match.end() + 80)
+                snippet = text[start:end].replace('\n', ' ')
+                findings.append({'file': path, 'kind': label, 'match': match.group(0), 'snippet': snippet})
+          open('leak-scan-findings.json', 'w').write(json.dumps(findings, indent=2))
+          print(json.dumps({'finding_count': len(findings), 'files_scanned': files}, indent=2))
+          PY
+
+      - name: Upload UI audit report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kanban-ui-leakage-audit-report
+          path: |
+            macos-env.txt
+            hostname.txt
+            artifact-tree.txt
+            cdp-version.json
+            cdp-pages.json
+            dom-audit.json
+            dom-text.txt
+            ui-screenshot.png
+            processes-before.txt
+            processes-after.txt
+            launch-result.txt
+            conductor-launch.log
+            conductor.pid
+            leak-scan-findings.json
+          if-no-files-found: ignore
