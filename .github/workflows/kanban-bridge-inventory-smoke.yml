@@ -169,7 +169,7 @@ jobs:
             if (!desktop.hasBridge) throw new Error('Packaged desktop renderer did not expose window.conductor');
             if (!desktop.systemInfo || desktop.systemInfo.platform !== 'darwin') throw new Error('Desktop bridge system:getInfo did not return darwin system info');
             if (!desktop.inventorySummary || desktop.inventorySummary.toolCount < 5) throw new Error('Desktop inventory did not return expected tool list');
-            if (!/Live local inventory|Partial local inventory|Configuration needed|Credentials needed|No local tools detected/.test(desktop.bodyText)) {
+            if (!/Live local inventory|Partial local inventory|Configuration needed|Credentials needed|No local tools detected/i.test(desktop.bodyText)) {
               throw new Error('Desktop UI did not show a completed inventory state');
             }
             cdp.ws.close();
