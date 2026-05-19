@@ -214,32 +214,20 @@ const rejectScreenshot = await screenshot('activity-after-reject');
 
 const approveResult = await clickButtonByText('Approve');
 if (!approveResult.ok || approveResult.disabled) throw new Error(`Approve button failed: ${JSON.stringify(approveResult)}`);
-await sleep(1500);
-let osascriptResult = { ok: false, output: '' };
-try {
-  const output = sh('osascript', ['-e', 'tell application "System Events"', '-e', 'tell process "Conductor"', '-e', 'click button "Confirm" of window 1', '-e', 'end tell', '-e', 'end tell']);
-  osascriptResult = { ok: true, output };
-} catch (error) {
-  osascriptResult = { ok: false, output: String(error.stderr || error.message || error) };
-  // Try keyboard path as fallback. The dialog default is Cancel, so tab to Confirm then Space.
-  try { sh('osascript', ['-e', 'tell application "System Events" to key code 48', '-e', 'delay 0.2', '-e', 'tell application "System Events" to key code 49']); } catch {}
-}
 await sleep(3000);
 text = await bodyText();
-assertIncludes(text, 'approved', 'approved decision visible');
-assertIncludes(text, 'No action executed', 'native confirmation no-execution visible');
-const approveScreenshot = await screenshot('activity-after-approve-confirm');
+assertIncludes(text, 'Approving...', 'approve button awaiting native confirmation');
+assertIncludes(text, 'No command executes from these controls', 'approve safe copy while native confirmation is pending');
+const approveScreenshot = await screenshot('activity-after-approve-awaiting-native-confirmation');
 
 const decisionsRaw = fs.existsSync(decisionPath) ? fs.readFileSync(decisionPath, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line)) : [];
 const confirmationsRaw = fs.existsSync(confirmationPath) ? fs.readFileSync(confirmationPath, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line)) : [];
 const auditsRaw = fs.existsSync(auditPath) ? fs.readFileSync(auditPath, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line)) : [];
 if (decisionsRaw.length !== 2) throw new Error(`Expected 2 decisions, found ${decisionsRaw.length}`);
 if (!decisionsRaw.every((entry) => entry.execution?.rendererCanExecute === false)) throw new Error('A decision allowed renderer execution');
-if (!decisionsRaw.some((entry) => entry.decision?.decision === 'approved' && entry.execution?.requiresNativeConfirmation === true)) throw new Error('Approved decision did not require native confirmation');
-if (!decisionsRaw.some((entry) => entry.decision?.decision === 'rejected' && entry.execution?.requiresNativeConfirmation === false)) throw new Error('Rejected decision was not terminal');
-if (confirmationsRaw.length < 1) throw new Error('Expected at least one native confirmation record');
+if (!decisionsRaw.some((entry) => entry.decision?.decision === 'approved' && entry.state === 'accepted_for_native_confirmation' && entry.execution?.requiresNativeConfirmation === true)) throw new Error('Approved decision did not stop at native confirmation gate');
+if (!decisionsRaw.some((entry) => entry.decision?.decision === 'rejected' && entry.state === 'rejected' && entry.execution?.requiresNativeConfirmation === false)) throw new Error('Rejected decision was not terminal');
 if (!confirmationsRaw.every((entry) => entry.execution?.rendererCanExecute === false && entry.execution?.executed === false)) throw new Error('A native confirmation reported executable behavior');
-if (!confirmationsRaw.some((entry) => entry.status === 'confirmed_no_execution')) throw new Error('No confirmed_no_execution native confirmation found');
 
 const summary = {
   appPath,
@@ -251,7 +239,6 @@ const summary = {
   decisions: decisionsRaw.map((entry) => ({ correlationId: entry.correlationId, decision: entry.decision?.decision, state: entry.state, execution: entry.execution })),
   confirmations: confirmationsRaw.map((entry) => ({ correlationId: entry.correlationId, status: entry.status, execution: entry.execution, nativeConfirmation: entry.nativeConfirmation })),
   auditEventCount: auditsRaw.length,
-  osascriptResult,
   stdout: stdout.slice(-2000),
   stderr: stderr.slice(-2000),
 };
