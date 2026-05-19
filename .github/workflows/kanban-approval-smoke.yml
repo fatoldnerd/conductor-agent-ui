@@ -1,0 +1,41 @@
+name: Kanban Approval Queue Smoke
+
+on:
+  push:
+    branches:
+      - kanban/t_555db9bc-approval-smoke
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  smoke-approval-queue:
+    name: Smoke approval queue and decisions on macOS artifact
+    runs-on: macos-latest
+    steps:
+      - name: Checkout smoke harness
+        uses: actions/checkout@v4
+
+      - name: Download parent macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 25458687751
+          name: conductor-macos-unsigned
+          path: artifact
+
+      - name: Show artifact layout
+        run: find artifact -maxdepth 4 -print
+
+      - name: Smoke test approval queue and decision UI
+        run: node scripts/kanban-approval-smoke.mjs
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: approval-queue-smoke-report
+          path: smoke-report/**
+          if-no-files-found: warn
