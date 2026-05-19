@@ -103,22 +103,30 @@ jobs:
             if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
             return result.result.value;
           }
+          function asEntries(value) {
+            if (Array.isArray(value)) return value.map((item) => [item.id, item]);
+            if (value && typeof value === 'object') return Object.entries(value);
+            return [];
+          }
           function summarizeInventory(inventory) {
-            const tools = inventory.tools || [];
-            const services = inventory.services || [];
-            const configs = inventory.configs || [];
-            const secrets = inventory.secrets || [];
+            const tools = asEntries(inventory.tools).map(([id, tool]) => ({ id, ...tool }));
+            const services = asEntries(inventory.services).map(([id, service]) => ({ id, ...service }));
+            const configs = asEntries(inventory.configs).map(([id, config]) => ({ id, ...config }));
+            const secretMarkers = Object.entries(inventory.configs?.hermesEnv?.secrets || {})
+              .map(([id, present]) => ({ id, present: Boolean(present) }));
             return {
-              platform: inventory.system?.platform,
-              arch: inventory.system?.arch,
+              platform: inventory.machine?.platform,
+              arch: inventory.machine?.arch,
+              desktopSmoke: inventory.desktopSmoke,
               toolCount: tools.length,
               readyTools: tools.filter((tool) => tool.status === 'ready').map((tool) => ({ id: tool.id, label: tool.label, version: tool.version || null })),
               missingTools: tools.filter((tool) => tool.status === 'missing').map((tool) => tool.id),
               brokenTools: tools.filter((tool) => tool.status === 'broken').map((tool) => ({ id: tool.id, diagnosticKind: tool.diagnosticKind || null, error: tool.error || null })),
               serviceCount: services.length,
               runningServices: services.filter((service) => service.status === 'running').map((service) => ({ id: service.id, label: service.label })),
-              configMarkers: configs.map((config) => ({ id: config.id, present: Boolean(config.present) })),
-              secretMarkers: secrets.map((secret) => ({ id: secret.id, present: Boolean(secret.present) })),
+              stoppedOrPortInUseServices: services.filter((service) => service.status !== 'running').map((service) => ({ id: service.id, label: service.label, status: service.status, portState: service.portState || null })),
+              configMarkers: configs.map((config) => ({ id: config.id, present: Boolean(config.exists ?? config.present) })),
+              secretMarkers,
             };
           }
 
