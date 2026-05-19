@@ -189,7 +189,7 @@ jobs:
             CHROME="/Applications/Chromium.app/Contents/MacOS/Chromium"
           fi
           test -x "$CHROME"
-          "$CHROME" --headless=new --disable-gpu --no-sandbox --remote-debugging-port=9333 http://127.0.0.1:4173 > chrome-browser.log 2>&1 &
+          "$CHROME" --headless=new --disable-gpu --no-sandbox --window-size=1440,960 --remote-debugging-port=9333 http://127.0.0.1:4173 > chrome-browser.log 2>&1 &
           echo $! > chrome-browser.pid
           node <<'NODE'
           const fs = require('node:fs/promises');
@@ -240,6 +240,12 @@ jobs:
             const cdp = await connectCdp(9333);
             await cdp.send('Page.enable');
             await cdp.send('Runtime.enable');
+            await cdp.send('Emulation.setDeviceMetricsOverride', {
+              width: 1440,
+              height: 960,
+              deviceScaleFactor: 1,
+              mobile: false,
+            });
             await sleep(3000);
             const browser = asReturnValue(await cdp.send('Runtime.evaluate', {
               expression: `({ url: location.href, hasBridge: Boolean(window.conductor), bodyText: document.body.innerText.slice(0, 12000) })`,
